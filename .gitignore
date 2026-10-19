@@ -1,0 +1,23 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.coverage
+build/
+
+# CDK
+cdk.out/
+cdk.context.json
+
+# Frontend
+node_modules/
+frontend/dist/
+
+# Secrets and local config: vendor tokens never go in this public repo
+.env
+.env.*
+*.pem
+
+.DS_Store
