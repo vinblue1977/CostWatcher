@@ -55,11 +55,17 @@ class CommandError(ValueError):
     """The command is unknown, unsupported by the device, or has a bad value."""
 
 
-def validate_command(device: Device, command: str, value: Any = None) -> None:
+def validate_command(device: Device, command: str, value: Any = None, confirm: Any = None) -> None:
     needed = COMMANDS.get(command)
     if needed is None:
         raise CommandError(f"unknown command {command!r}")
     if needed not in device.capabilities:
         raise CommandError(f"{device.name} does not support {command!r}")
-    if command == "set_level" and (isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 100):
-        raise CommandError("set_level needs a whole number from 0 to 100")
+    if command == "set_level":
+        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 100:
+            raise CommandError("set_level needs a whole number from 0 to 100")
+    elif value is not None:
+        raise CommandError(f"{command!r} takes no value")
+    # Opening a door is physical access: the app sends confirm=true only after its confirmation sheet.
+    if command == "open" and confirm is not True:
+        raise CommandError("open needs confirm=true")

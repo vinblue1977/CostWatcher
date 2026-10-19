@@ -35,7 +35,7 @@ class HomeHubStack(Stack):
 
         topic = self._alert_topic()
         site_dir = self.node.try_get_context("siteDir") or "site"
-        Web(self, "Web", table=self.table, site_dir=site_dir, topic=topic)  # pyright: ignore[reportArgumentType]
+        Web(self, "Web", site_dir=site_dir, topic=topic)  # pyright: ignore[reportArgumentType]
         self._budget()
 
         github_repo: str = self.node.try_get_context("githubRepo") or ""

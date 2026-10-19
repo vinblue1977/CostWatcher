@@ -146,6 +146,36 @@ def test_api_routes_require_sign_in_and_site_is_private() -> None:
     )
 
 
+def test_localhost_is_allowed_only_when_asked() -> None:
+    def origins(template: Template) -> str:
+        return json.dumps(
+            [
+                *(c["Properties"]["CallbackURLs"] for c in template.find_resources("AWS::Cognito::UserPoolClient").values()),
+                *(a["Properties"]["CorsConfiguration"] for a in template.find_resources("AWS::ApiGatewayV2::Api").values()),
+            ]
+        )
+
+    assert "localhost" not in origins(_template())
+    assert "localhost:5173" in origins(_template({"devOrigin": "true"}))
+
+
+def test_csp_allows_cognito_api_and_blocks_inline_styles() -> None:
+    policies = _template().find_resources("AWS::CloudFront::ResponseHeadersPolicy")
+    csp = json.dumps([p["Properties"] for p in policies.values()])
+    assert "cognito-idp.us-east-2.amazonaws.com" in csp and "style-src 'self';" in csp and "unsafe-inline" not in csp
+
+
+def test_api_lambda_has_no_table_access_yet() -> None:
+    api = next(
+        f
+        for f in _template().find_resources("AWS::Lambda::Function").values()
+        if f["Properties"]["Handler"] == "api.handler.handler"
+    )
+    assert "Environment" not in api["Properties"]
+    policies = json.dumps(_template().find_resources("AWS::IAM::Policy"))
+    assert "dynamodb:PutItem" not in policies
+
+
 def test_lambdas_stay_outside_a_vpc() -> None:
     functions = _template().find_resources("AWS::Lambda::Function")
     assert functions

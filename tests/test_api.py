@@ -52,6 +52,24 @@ def test_command_is_accepted_but_mock() -> None:
     assert status == 202 and body == {"accepted": True, "mock": True, "device": "st-garage-krish", "command": "close"}
 
 
+def test_opening_a_door_needs_explicit_confirmation() -> None:
+    door = "st-garage-shria"
+    assert _call("POST /devices/{id}/commands", door, json.dumps({"command": "open"}))[0] == 400
+    assert _call("POST /devices/{id}/commands", door, json.dumps({"command": "open", "confirm": "yes"}))[0] == 400
+    assert _call("POST /devices/{id}/commands", door, json.dumps({"command": "open", "confirm": True}))[0] == 202
+
+
+def test_malformed_authorizer_is_401_not_500() -> None:
+    event = {"routeKey": "GET /devices", "requestContext": {"authorizer": None}}
+    assert handler(event, None)["statusCode"] == 401
+
+
+def test_body_limit_counts_bytes() -> None:
+    body = json.dumps({"command": "on", "pad": "é" * 600}, ensure_ascii=False)  # under 1024 characters, over 1024 bytes
+    assert len(body) < 1024 < len(body.encode())
+    assert _call("POST /devices/{id}/commands", "st-light-porch", body)[0] == 400
+
+
 @pytest.mark.parametrize(
     ("device_id", "body"),
     [
@@ -60,6 +78,7 @@ def test_command_is_accepted_but_mock() -> None:
         ("st-light-living", {"command": "set_level", "value": 101}),
         ("st-light-living", {"command": "set_level", "value": True}),
         ("st-light-living", {"command": "set_level"}),
+        ("st-light-living", {"command": "on", "value": 5}),  # on/off take no value
         ("st-lock-front", {"command": "off"}),  # locks are read-only for now
         ("st-light-living", {"command": "explode"}),
         ("st-light-living", {"nope": 1}),

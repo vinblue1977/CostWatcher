@@ -12,7 +12,6 @@ from aws_cdk import aws_cloudfront_origins as origins
 from aws_cdk import aws_cloudwatch as cloudwatch
 from aws_cdk import aws_cloudwatch_actions as cw_actions
 from aws_cdk import aws_cognito as cognito
-from aws_cdk import aws_dynamodb as dynamodb
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
 from aws_cdk import aws_s3 as s3
@@ -21,7 +20,7 @@ from aws_cdk import aws_sns as sns
 from cdk_nag import NagPackSuppression, NagSuppressions, RegexAppliesTo
 from constructs import Construct
 
-DEV_ORIGIN = "http://localhost:5173"
+DEV_ORIGIN = "http://localhost:5173"  # only allowed when the stack is synthesized with -c devOrigin=true
 
 ROUTES = (
     (apigw.HttpMethod.GET, "/devices"),
@@ -36,7 +35,6 @@ class Web(Construct):
         scope: Construct,
         construct_id: str,
         *,
-        table: dynamodb.ITableV2,
         site_dir: str,
         topic: sns.ITopic,
     ) -> None:
@@ -56,6 +54,8 @@ class Web(Construct):
         )
         auth_prefix = f"homehub-{Aws.ACCOUNT_ID}"
         auth_url = f"https://{auth_prefix}.auth.{region}.amazoncognito.com"
+        cognito_api = f"https://cognito-idp.{region}.amazonaws.com"  # SRP and passkey calls from the browser
+        dev_origins = [DEV_ORIGIN] if self.node.try_get_context("devOrigin") in (True, "true") else []
         headers = cloudfront.ResponseHeadersPolicy(
             self,
             "SecurityHeaders",
@@ -64,7 +64,7 @@ class Web(Construct):
                     content_security_policy=(
                         "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; "
                         "manifest-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; "
-                        f"connect-src 'self' https://*.execute-api.{region}.amazonaws.com {auth_url}; "
+                        f"connect-src 'self' https://*.execute-api.{region}.amazonaws.com {auth_url} {cognito_api}; "
                         "upgrade-insecure-requests"
                     ),
                     override=True,
@@ -149,8 +149,8 @@ class Web(Construct):
             o_auth=cognito.OAuthSettings(
                 flows=cognito.OAuthFlows(authorization_code_grant=True),
                 scopes=[cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL],
-                callback_urls=[f"{site_url}/", f"{DEV_ORIGIN}/"],
-                logout_urls=[f"{site_url}/", f"{DEV_ORIGIN}/"],
+                callback_urls=[f"{o}/" for o in [site_url, *dev_origins]],
+                logout_urls=[f"{o}/" for o in [site_url, *dev_origins]],
             ),
             supported_identity_providers=[cognito.UserPoolClientIdentityProvider.COGNITO],
         )
@@ -180,10 +180,8 @@ class Web(Construct):
             code=lambda_.Code.from_asset("backend", exclude=["**/__pycache__"]),
             memory_size=256,
             timeout=Duration.seconds(10),
-            environment={"TABLE_NAME": table.table_name},
             log_group=logs.LogGroup(self, "ApiLogs", retention=logs.RetentionDays.TWO_WEEKS),
-        )
-        table.grant_read_write_data(fn)
+        )  # no table access yet: the mock API stores nothing; grant it when the adapters keep tokens
         # A burst of crashes (3 in 5 minutes) or throttled calls emails the alert topic.
         for metric_name, metric in (("Errors", fn.metric_errors), ("Throttles", fn.metric_throttles)):
             metric(period=Duration.minutes(5)).create_alarm(
@@ -200,7 +198,7 @@ class Web(Construct):
             create_default_stage=False,
             default_authorizer=authorizers.HttpUserPoolAuthorizer("Cognito", pool, user_pool_clients=[client]),  # pyright: ignore[reportArgumentType]
             cors_preflight=apigw.CorsPreflightOptions(
-                allow_origins=[site_url, DEV_ORIGIN],
+                allow_origins=[site_url, *dev_origins],
                 allow_methods=[apigw.CorsHttpMethod.GET, apigw.CorsHttpMethod.POST],
                 allow_headers=["Authorization", "Content-Type"],
                 max_age=Duration.hours(1),
@@ -262,11 +260,6 @@ class Web(Construct):
             fn,
             [
                 reason("AwsSolutions-IAM4", "Basic execution role only writes this function's logs", [logs_policy]),
-                reason(
-                    "AwsSolutions-IAM5",
-                    "CDK's table grant includes its indexes",
-                    [RegexAppliesTo(regex=r"/^Resource::<Table.+\.Arn>\/index\/\*$/g")],
-                ),
             ],
             apply_to_children=True,
         )
