@@ -1,0 +1,27 @@
+[project]
+name = "home-hub"
+version = "0.1.0"
+description = "Dark-mode PWA for SmartThings, garage doors and LG ThinQ appliances on serverless AWS"
+requires-python = ">=3.14"
+license = "MIT"
+license-files = ["LICENSE"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "backend"]
+addopts = "-q --cov=infra --cov=api --cov-report=term-missing:skip-covered --cov-fail-under=90"
+
+[tool.ruff]
+line-length = 130
+target-version = "py314"
+extend-exclude = ["build", ".venv", "cdk.out", "node_modules"]
+
+[tool.ruff.lint]
+# E/F/W: correctness, I: imports, B: bugbear, UP: modern syntax, S: bandit security checks
+select = ["E", "F", "W", "I", "B", "UP", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["infra", "api"]

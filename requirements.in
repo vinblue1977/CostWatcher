@@ -1,0 +1,5 @@
+# Infrastructure (CDK app). Exact versions: the deploy builds with exactly what the PR tested; Dependabot proposes
+# updates, and each update PR's checks synthesize with the pinned CDK CLI (package-lock.json), catching a mismatch.
+aws-cdk-lib==2.273.0
+constructs==10.8.1
+cdk-nag==2.38.2  # v3 is a rewrite (experimental suppressions API); revisit when stable
