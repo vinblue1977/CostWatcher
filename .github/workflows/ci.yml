@@ -245,7 +245,7 @@ jobs:
         run: |
           : "${ALERT_EMAIL:?set the ALERT_EMAIL secret}"  # a missing secret would silently drop failure emails
           . .venv/bin/activate
-          npx --no-install cdk deploy --require-approval never -c alertEmail="$ALERT_EMAIL" --outputs-file cdk-outputs.json
+          npx --no-install cdk deploy --all --require-approval never -c alertEmail="$ALERT_EMAIL" --outputs-file cdk-outputs.json
         env:
           ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}  # environment secret, masked in logs
       - name: Smoke test
