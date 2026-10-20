@@ -14,6 +14,8 @@ def _env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ATHENA_WORKGROUP", "wg")
     monkeypatch.setenv("ATHENA_DATABASE", "costwatcher")
     monkeypatch.setenv("ATHENA_TABLE", "cur")
+    monkeypatch.setenv("BUDGET_USD", "20")
+    monkeypatch.setenv("TOPIC_ARN", "arn:topic")
 
 
 class FakeAthena:
@@ -130,5 +132,67 @@ def test_handler_writes_one_item_per_day(monkeypatch: pytest.MonkeyPatch) -> Non
 
     dynamo = FakeDynamo()
     monkeypatch.setattr(ingest, "_client", lambda name: athena if name == "athena" else dynamo)
-    assert ingest.handler({"months": ["2026-10"]}, None) == {"written": {"2026-10": 1}}
+    assert ingest.handler({"months": ["2026-10"]}, None) == {"written": {"2026-10": 1}, "alerts": []}
     assert dynamo.puts[0]["TableName"] == "costs" and dynamo.puts[0]["Item"]["SK"] == {"S": "DAY#2026-10-01"}
+
+
+class Marked:
+    """A DynamoDB stand-in that refuses a marker put twice, as the real conditional put does."""
+
+    def __init__(self) -> None:
+        self.keys: set[str] = set()
+        self.deleted: list[dict[str, Any]] = []
+
+    def put_item(self, **kwargs: Any) -> None:
+        key = kwargs["Item"]["SK"]["S"]
+        if key in self.keys:
+            error = Exception("exists")
+            error.response = {"Error": {"Code": "ConditionalCheckFailedException"}}  # type: ignore[attr-defined]
+            raise error
+        self.keys.add(key)
+
+    def delete_item(self, **kwargs: Any) -> None:
+        self.deleted.append(kwargs["Key"])
+        self.keys.discard(kwargs["Key"]["SK"]["S"])
+
+
+class Sns:
+    def __init__(self, fail: bool = False) -> None:
+        self.published: list[dict[str, Any]] = []
+        self.fail = fail
+
+    def publish(self, **kwargs: Any) -> None:
+        if self.fail:
+            raise RuntimeError("sns down")
+        self.published.append(kwargs)
+
+
+def _steady(total: str = "1") -> dict[str, dict[str, Any]]:
+    return {
+        f"2026-10-0{i}": {"total": Decimal(total), "services": {"S": Decimal(total)}, "projects": {}, "usageTypes": {}}
+        for i in range(1, 8)
+    }
+
+
+def test_alert_is_published_once_across_runs(monkeypatch: pytest.MonkeyPatch) -> None:
+    sns, dynamo = Sns(), Marked()
+    monkeypatch.setattr(ingest, "_client", lambda name: sns)
+    today = dt.date(2026, 10, 8)
+    assert ingest._notify(_steady(), today, dynamo) == ["budget#2026-10"]
+    assert ingest._notify(_steady(), today, dynamo) == []  # the marker is already there
+    assert len(sns.published) == 1 and sns.published[0]["TopicArn"] == "arn:topic"
+
+
+def test_failed_publish_releases_the_marker_so_the_next_run_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    dynamo = Marked()
+    monkeypatch.setattr(ingest, "_client", lambda name: Sns(fail=True))
+    with pytest.raises(RuntimeError, match="sns down"):
+        ingest._notify(_steady(), dt.date(2026, 10, 8), dynamo)
+    assert dynamo.keys == set() and len(dynamo.deleted) == 1
+
+
+def test_old_data_never_alerts(monkeypatch: pytest.MonkeyPatch) -> None:
+    sns = Sns()
+    monkeypatch.setattr(ingest, "_client", lambda name: sns)
+    assert ingest._notify(_steady(), dt.date(2026, 10, 20), Marked()) == []
+    assert sns.published == []

@@ -43,7 +43,14 @@ def bucket_name() -> str:
 
 class Cur(Construct):
     def __init__(
-        self, scope: Construct, construct_id: str, *, table: dynamodb.ITable, topic: sns.ITopic, project_tag: str
+        self,
+        scope: Construct,
+        construct_id: str,
+        *,
+        table: dynamodb.ITable,
+        topic: sns.ITopic,
+        project_tag: str,
+        budget_usd: float,
     ) -> None:
         super().__init__(scope, construct_id)
         stack = Stack.of(self)
@@ -145,11 +152,15 @@ class Cur(Construct):
                 "ATHENA_DATABASE": DATABASE,
                 "ATHENA_TABLE": TABLE,
                 "PROJECT_TAG": project_tag,
+                "TOPIC_ARN": topic.topic_arn,
+                "BUDGET_USD": str(budget_usd),
             },
             log_group=logs.LogGroup(self, "IngestLogs", retention=logs.RetentionDays.TWO_WEEKS),
         )
         fn.node.add_dependency(workgroup)
-        table.grant(fn, "dynamodb:PutItem")  # the only writer; the API Lambda stays read-only
+        # The only writer; the API Lambda stays read-only. Alert markers are put once and deleted if the email fails.
+        table.grant(fn, "dynamodb:PutItem", "dynamodb:DeleteItem")
+        topic.grant_publish(fn)  # pyright: ignore[reportArgumentType]
         bucket.grant_read(fn, f"{EXPORT_PREFIX}/*")
         bucket.grant_read_write(fn, "athena/*")
         fn.add_to_role_policy(

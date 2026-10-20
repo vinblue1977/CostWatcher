@@ -7,11 +7,14 @@ import time
 from decimal import Decimal
 from typing import Any
 
+from ingest import analysis
+
 MONTH = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
 REVISION_DAYS = 5  # early in a month, the previous month is still being revised
 POLL_SECONDS = 2
 QUERY_SECONDS = 120  # two months of queries must fit in the Lambda's 5 minutes
 UNATTRIBUTED = "unattributed"
+ALERT_FRESH_DAYS = 3  # a hand-run backfill of old months must not email about them
 
 
 def _client(name: str) -> Any:
@@ -25,12 +28,15 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     months = _months(event, dt.datetime.now(dt.UTC).date())
     athena, dynamodb = _client("athena"), _client("dynamodb")
     written = {}
+    seen: dict[str, dict[str, Any]] = {}
     for month in months:
         days = _days(_query(athena, _sql(month)))
         for date, item in days.items():
             dynamodb.put_item(TableName=os.environ["TABLE_NAME"], Item=_item(month, date, item))
         written[month] = len(days)
-    return {"written": written}
+        seen.update(days)
+    sent = _notify(seen, dt.datetime.now(dt.UTC).date(), dynamodb)
+    return {"written": written, "alerts": sent}
 
 
 def _months(event: dict[str, Any], today: dt.date) -> list[str]:
@@ -43,6 +49,28 @@ def _months(event: dict[str, Any], today: dt.date) -> list[str]:
     if today.day > REVISION_DAYS:
         return [current]
     return [(today.replace(day=1) - dt.timedelta(days=1)).strftime("%Y-%m"), current]
+
+
+def _notify(days: dict[str, dict[str, Any]], today: dt.date, dynamodb: Any) -> list[str]:
+    """Emails each new alert once. A marker item per alert key stops tomorrow's run from repeating it."""
+    if not days or (today - dt.date.fromisoformat(max(days))).days > ALERT_FRESH_DAYS:
+        return []
+    month, sent = max(days)[:7], []
+    for alert in analysis.alerts(days, Decimal(os.environ["BUDGET_USD"])):
+        marker = {"PK": {"S": f"ALERT#{month}"}, "SK": {"S": alert.key}}
+        try:
+            dynamodb.put_item(TableName=os.environ["TABLE_NAME"], Item=marker, ConditionExpression="attribute_not_exists(SK)")
+        except Exception as error:
+            if getattr(error, "response", {}).get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+                continue  # already sent
+            raise
+        try:
+            _client("sns").publish(TopicArn=os.environ["TOPIC_ARN"], Subject=alert.subject[:100], Message=alert.message)
+        except Exception:
+            dynamodb.delete_item(TableName=os.environ["TABLE_NAME"], Key=marker)  # let the next run retry
+            raise
+        sent.append(alert.key)
+    return sent
 
 
 def _tag_column() -> str:
