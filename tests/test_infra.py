@@ -307,3 +307,36 @@ def test_sign_in_page_is_dark() -> None:
             ),
         },
     )
+
+
+def test_resources_carry_the_project_tag_the_ingest_reads() -> None:
+    expected = [{"Key": "project", "Value": "costwatcher"}]
+    template = _template()
+    template.has_resource_properties(  # a TableV2 keeps its tags on the replica
+        "AWS::DynamoDB::GlobalTable",
+        {"Replicas": Match.array_with([Match.object_like({"Tags": Match.array_with(expected)})])},
+    )
+    template.has_resource_properties("AWS::S3::Bucket", {"Tags": Match.array_with(expected)})
+    template.has_resource_properties("AWS::Lambda::Function", {"Tags": Match.array_with(expected)})
+
+
+def test_project_tag_key_follows_the_context_the_ingest_uses() -> None:
+    template = _template({"projectTag": "team"})
+    template.has_resource_properties(
+        "AWS::DynamoDB::GlobalTable",
+        {
+            "Replicas": Match.array_with(
+                [Match.object_like({"Tags": Match.array_with([{"Key": "team", "Value": "costwatcher"}])})]
+            )
+        },
+    )
+
+
+def test_export_is_tagged_too() -> None:
+    app = cdk.App(context=CDK_CONTEXT)
+    export = CurExportStack(
+        app, "Export", bucket_region="us-east-2", env=cdk.Environment(account="123456789012", region="us-east-1")
+    )
+    Template.from_stack(export).has_resource_properties(
+        "AWS::BCMDataExports::Export", {"Tags": Match.array_with([{"Key": "project", "Value": "costwatcher"}])}
+    )

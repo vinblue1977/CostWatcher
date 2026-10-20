@@ -2,7 +2,7 @@
 
 import re
 
-from aws_cdk import CfnOutput, DefaultStackSynthesizer, Duration, RemovalPolicy, Stack
+from aws_cdk import CfnOutput, DefaultStackSynthesizer, Duration, RemovalPolicy, Stack, Tags
 from aws_cdk import aws_budgets as budgets
 from aws_cdk import aws_dynamodb as dynamodb
 from aws_cdk import aws_iam as iam
@@ -15,6 +15,12 @@ from infra.cur import Cur
 from infra.web import Web
 
 GITHUB = "token.actions.githubusercontent.com"
+PROJECT_NAME = "costwatcher"
+
+
+def project_tag_key(scope: Construct) -> str:
+    """The cost allocation tag key, `project` unless the app is run with -c projectTag=<key>; the ingest reads the same one."""
+    return scope.node.try_get_context("projectTag") or "project"
 
 
 class CostWatcherStack(Stack):
@@ -38,7 +44,8 @@ class CostWatcherStack(Stack):
         site_dir = self.node.try_get_context("siteDir") or "site/dist"  # `make site` builds it
         budget_usd = float(self.node.try_get_context("monthlyBudgetUsd") or 5)
         Web(self, "Web", site_dir=site_dir, topic=topic, table=self.table, budget_usd=budget_usd)  # pyright: ignore[reportArgumentType]
-        project_tag: str = self.node.try_get_context("projectTag") or "project"
+        project_tag = project_tag_key(self)
+        Tags.of(self).add(project_tag, PROJECT_NAME)  # so this app's own spend lands under its own project
         Cur(self, "Cur", table=self.table, topic=topic, project_tag=project_tag, budget_usd=budget_usd)  # pyright: ignore[reportArgumentType]
         self._budget(budget_usd)
 
