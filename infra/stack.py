@@ -1,4 +1,4 @@
-"""The CostWatcher stack: data table, sign-in, API, hosting, alerts, budget and the GitHub deploy role."""
+"""The CostWatcher stack: daily cost table, sign-in, API, hosting, alerts, budget and the GitHub deploy role."""
 
 import re
 
@@ -20,7 +20,7 @@ class CostWatcherStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        # One table for everything, keyed by user (PK) and item type (SK). Empty until the adapters store tokens.
+        # Daily cost aggregates: PK COST#<YYYY-MM>, SK DAY#<date>. Empty until the ingest Lambda lands (phase 3).
         self.table = dynamodb.TableV2(
             self,
             "Table",
@@ -35,7 +35,7 @@ class CostWatcherStack(Stack):
 
         topic = self._alert_topic()
         site_dir = self.node.try_get_context("siteDir") or "site"
-        Web(self, "Web", site_dir=site_dir, topic=topic)  # pyright: ignore[reportArgumentType]
+        Web(self, "Web", site_dir=site_dir, topic=topic, table=self.table)  # pyright: ignore[reportArgumentType]
         self._budget()
 
         github_repo: str = self.node.try_get_context("githubRepo") or ""

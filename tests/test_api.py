@@ -1,103 +1,63 @@
-"""The devices API: sign-in is required, reads return the mock devices, and commands are validated."""
+"""The costs API: sign-in is required, months are validated, and a month's days are read from the table."""
 
 import json
+from decimal import Decimal
 from typing import Any
 
-import pytest
-
-from api.devices import BY_ID, MOCK_DEVICES, CommandError, validate_command
-from api.handler import handler
+from api import handler as api
 
 
-def _event(route: str, device_id: str | None = None, body: str | None = None, signed_in: bool = True) -> dict[str, Any]:
-    event: dict[str, Any] = {"routeKey": route, "pathParameters": {"id": device_id} if device_id else None, "body": body}
-    if signed_in:
-        event["requestContext"] = {"authorizer": {"jwt": {"claims": {"sub": "user-1"}}}}
+class FakeTable:
+    def __init__(self, *pages: dict[str, Any]) -> None:
+        self.pages = list(pages)
+        self.queries: list[dict[str, Any]] = []
+
+    def query(self, **kwargs: Any) -> dict[str, Any]:
+        self.queries.append(dict(kwargs))
+        return self.pages.pop(0)
+
+
+def _event(route: str = "GET /costs/{month}", month: str | None = "2026-10", signed_in: bool = True) -> dict[str, Any]:
+    event: dict[str, Any] = {"routeKey": route, "pathParameters": {"month": month} if month else None}
+    event["requestContext"] = {"authorizer": {"jwt": {"claims": {"sub": "u1"}}} if signed_in else None}
     return event
 
 
-def _call(*args: Any, **kwargs: Any) -> tuple[int, dict[str, Any]]:
-    response = handler(_event(*args, **kwargs), None)
-    return response["statusCode"], json.loads(response["body"])
-
-
 def test_requires_sign_in() -> None:
-    assert _call("GET /devices", signed_in=False)[0] == 401
-
-
-def test_lists_mock_devices_in_the_common_model() -> None:
-    status, body = _call("GET /devices")
-    assert status == 200 and body["mock"] is True
-    assert len(body["devices"]) == len(MOCK_DEVICES) == 8
-    assert set(body["devices"][0]) == {"id", "vendor", "name", "type", "room", "state", "capabilities"}
-    assert {d["vendor"] for d in body["devices"]} == {"smartthings", "lgthinq"}
-
-
-def test_both_garage_doors_are_present() -> None:
-    doors = [d for d in MOCK_DEVICES if d.type == "garage_door"]
-    assert [d.name for d in doors] == ["Shria door", "Krish door"]
-
-
-def test_gets_one_device_or_404() -> None:
-    assert _call("GET /devices/{id}", "st-light-living")[1]["name"] == "Living room light"
-    assert _call("GET /devices/{id}", "nope")[0] == 404
+    assert api.handler(_event(signed_in=False), None)["statusCode"] == 401
 
 
 def test_unknown_route_is_404() -> None:
-    assert _call("DELETE /devices")[0] == 404
-
-
-def test_command_is_accepted_but_mock() -> None:
-    status, body = _call("POST /devices/{id}/commands", "st-garage-krish", json.dumps({"command": "close"}))
-    assert status == 202 and body == {"accepted": True, "mock": True, "device": "st-garage-krish", "command": "close"}
-
-
-def test_opening_a_door_needs_explicit_confirmation() -> None:
-    door = "st-garage-shria"
-    assert _call("POST /devices/{id}/commands", door, json.dumps({"command": "open"}))[0] == 400
-    assert _call("POST /devices/{id}/commands", door, json.dumps({"command": "open", "confirm": "yes"}))[0] == 400
-    assert _call("POST /devices/{id}/commands", door, json.dumps({"command": "open", "confirm": True}))[0] == 202
+    assert api.handler(_event("GET /devices", None), None)["statusCode"] == 404
 
 
 def test_malformed_authorizer_is_401_not_500() -> None:
-    event = {"routeKey": "GET /devices", "requestContext": {"authorizer": None}}
-    assert handler(event, None)["statusCode"] == 401
+    event = {"routeKey": "GET /costs/{month}", "requestContext": {}}
+    assert api.handler(event, None)["statusCode"] == 401
 
 
-def test_body_limit_counts_bytes() -> None:
-    body = json.dumps({"command": "on", "pad": "é" * 600}, ensure_ascii=False)  # under 1024 characters, over 1024 bytes
-    assert len(body) < 1024 < len(body.encode())
-    assert _call("POST /devices/{id}/commands", "st-light-porch", body)[0] == 400
+def test_rejects_bad_months() -> None:
+    for month in ("", "2026-13", "2026-1", "2026-10-01", "x#y"):
+        assert api.handler(_event(month=month), None)["statusCode"] == 400, month
 
 
-@pytest.mark.parametrize(
-    ("device_id", "body"),
-    [
-        ("st-light-porch", {"command": "open"}),  # a light has no door
-        ("st-light-porch", {"command": "set_level", "value": 50}),  # on/off only
-        ("st-light-living", {"command": "set_level", "value": 101}),
-        ("st-light-living", {"command": "set_level", "value": True}),
-        ("st-light-living", {"command": "set_level"}),
-        ("st-light-living", {"command": "on", "value": 5}),  # on/off take no value
-        ("st-lock-front", {"command": "off"}),  # locks are read-only for now
-        ("st-light-living", {"command": "explode"}),
-        ("st-light-living", {"nope": 1}),
-        ("st-light-living", [1, 2]),
-    ],
-)
-def test_bad_commands_are_rejected(device_id: str, body: Any) -> None:
-    assert _call("POST /devices/{id}/commands", device_id, json.dumps(body))[0] == 400
+def test_reads_every_page_of_days() -> None:
+    day = {"PK": "COST#2026-10", "SK": "DAY#2026-10-01", "total": Decimal("1.25")}
+    table = FakeTable(
+        {"Items": [day], "LastEvaluatedKey": {"PK": "x", "SK": "y"}},
+        {"Items": [{**day, "SK": "DAY#2026-10-02", "total": Decimal("2")}]},
+    )
+    response = api._costs("2026-10", table)
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["days"] == [{"date": "2026-10-01", "total": 1.25}, {"date": "2026-10-02", "total": 2}]
+    assert table.queries[1]["ExclusiveStartKey"] == {"PK": "x", "SK": "y"}
+    assert table.queries[0]["ExpressionAttributeValues"] == {":pk": "COST#2026-10", ":sk": "DAY#"}
 
 
-def test_command_body_rules() -> None:
-    assert _call("POST /devices/{id}/commands", "st-light-living", None)[0] == 400
-    assert _call("POST /devices/{id}/commands", "st-light-living", "x" * 2000)[0] == 400
-    assert _call("POST /devices/{id}/commands", "st-light-living", "not json")[0] == 400
-    assert _call("POST /devices/{id}/commands", "nope", json.dumps({"command": "on"}))[0] == 404
-
-
-def test_set_level_accepts_0_to_100() -> None:
-    for value in (0, 70, 100):
-        validate_command(BY_ID["st-light-living"], "set_level", value)
-    with pytest.raises(CommandError):
-        validate_command(BY_ID["st-light-living"], "set_level", -1)
+def test_handler_routes_to_costs_and_reads_consistently(monkeypatch: Any) -> None:
+    table = FakeTable({"Items": [{"PK": "COST#2026-10", "SK": "DAY#2026-10-03", "date": "bogus", "n": Decimal("3")}]})
+    monkeypatch.setattr(api, "_days_table", lambda: table)
+    response = api.handler(_event(), None)
+    assert json.loads(response["body"])["days"] == [{"date": "2026-10-03", "n": 3}]
+    assert table.queries[0]["ConsistentRead"] is True

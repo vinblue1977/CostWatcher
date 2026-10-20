@@ -127,7 +127,7 @@ def test_api_routes_require_sign_in_and_site_is_private() -> None:
     template = _template()
     routes = template.find_resources("AWS::ApiGatewayV2::Route")
     by_key = {r["Properties"]["RouteKey"]: r["Properties"]["AuthorizationType"] for r in routes.values()}
-    assert by_key == {"GET /devices": "JWT", "GET /devices/{id}": "JWT", "POST /devices/{id}/commands": "JWT"}
+    assert by_key == {"GET /costs/{month}": "JWT"}
     template.has_resource_properties(
         "AWS::S3::Bucket",
         {
@@ -165,15 +165,20 @@ def test_csp_allows_cognito_api_and_blocks_inline_styles() -> None:
     assert "cognito-idp.us-east-2.amazonaws.com" in csp and "style-src 'self';" in csp and "unsafe-inline" not in csp
 
 
-def test_api_lambda_has_no_table_access_yet() -> None:
+def test_api_lambda_can_only_read_the_table() -> None:
+    template = _template()
     api = next(
         f
-        for f in _template().find_resources("AWS::Lambda::Function").values()
+        for f in template.find_resources("AWS::Lambda::Function").values()
         if f["Properties"]["Handler"] == "api.handler.handler"
     )
-    assert "Environment" not in api["Properties"]
-    policies = json.dumps(_template().find_resources("AWS::IAM::Policy"))
-    assert "dynamodb:PutItem" not in policies
+    assert "TABLE_NAME" in api["Properties"]["Environment"]["Variables"]
+    policies = json.dumps(template.find_resources("AWS::IAM::Policy"))
+    assert "dynamodb:Query" in policies
+    for broad in ("Scan", "GetItem", "BatchGetItem"):
+        assert f"dynamodb:{broad}" not in policies
+    for write in ("PutItem", "UpdateItem", "DeleteItem", "BatchWriteItem"):
+        assert f"dynamodb:{write}" not in policies
 
 
 def test_lambdas_stay_outside_a_vpc() -> None:

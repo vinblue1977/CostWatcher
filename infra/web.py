@@ -12,6 +12,7 @@ from aws_cdk import aws_cloudfront_origins as origins
 from aws_cdk import aws_cloudwatch as cloudwatch
 from aws_cdk import aws_cloudwatch_actions as cw_actions
 from aws_cdk import aws_cognito as cognito
+from aws_cdk import aws_dynamodb as dynamodb
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
 from aws_cdk import aws_s3 as s3
@@ -22,11 +23,7 @@ from constructs import Construct
 
 DEV_ORIGIN = "http://localhost:5173"  # only allowed when the stack is synthesized with -c devOrigin=true
 
-ROUTES = (
-    (apigw.HttpMethod.GET, "/devices"),
-    (apigw.HttpMethod.GET, "/devices/{id}"),
-    (apigw.HttpMethod.POST, "/devices/{id}/commands"),
-)
+ROUTES = ((apigw.HttpMethod.GET, "/costs/{month}"),)
 
 
 class Web(Construct):
@@ -37,6 +34,7 @@ class Web(Construct):
         *,
         site_dir: str,
         topic: sns.ITopic,
+        table: dynamodb.ITable,
     ) -> None:
         super().__init__(scope, construct_id)
         region = Stack.of(self).region
@@ -180,8 +178,10 @@ class Web(Construct):
             code=lambda_.Code.from_asset("backend", exclude=["**/__pycache__"]),
             memory_size=256,
             timeout=Duration.seconds(10),
+            environment={"TABLE_NAME": table.table_name},
             log_group=logs.LogGroup(self, "ApiLogs", retention=logs.RetentionDays.TWO_WEEKS),
-        )  # no table access yet: the mock API stores nothing; grant it when the adapters keep tokens
+        )
+        table.grant(fn, "dynamodb:Query")  # the one call the handler makes; the ingest Lambda is the writer
         # A burst of crashes (3 in 5 minutes) or throttled calls emails the alert topic.
         for metric_name, metric in (("Errors", fn.metric_errors), ("Throttles", fn.metric_throttles)):
             metric(period=Duration.minutes(5)).create_alarm(

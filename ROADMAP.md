@@ -14,10 +14,12 @@ Ideas and bugs found while building CostWatcher. The phased build plan is in [do
 
 ## Bugs and risks
 
-- **Mock devices API is leftover scaffold.** Remove it, and its tests, in the phase 2 PR.
+- **Cost data is global, not per user.** Any signed-in user reads all of it; safe only while sign-up stays closed.
+- **`GET /costs/{month}` is unbounded.** It returns every item under the month's key; paginate or summarize if per-resource items share it.
+- **An empty month looks like zero cost.** The dashboard should show "no data yet", not $0, when `days` is empty.
 - **SPA fallback hides missing files.** CloudFront turns every S3 403/404 into a 200 `index.html`, so a missing `config.json` or hashed asset returns HTML. Scope the fallback to extensionless paths with a CloudFront Function when the real site ships.
 - **Alerts vanish if `alertEmail` is omitted.** The budget and email subscription only exist when `-c alertEmail=...` is passed, so a local `cdk deploy` without it removes them. CI always passes it; always pass it locally too.
-- **The API Lambda has no table access.** It was given none on purpose; add the narrowest grant when the aggregate table exists (and the cdk-nag index suppression).
+- **The API Lambda has read-only table access.** The ingest Lambda (phase 3) needs its own write grant; keep the two roles separate.
 - **Local site development needs `-c devOrigin=true`.** localhost:5173 is not allowed on the deployed pool or API by default.
 - **CodeQL languages look empty.** The default-setup call on 2026-10-20 returned `configured` with no languages; confirm it is scanning.
 - **The deploy role is created by the stack.** The first deploy is a manual bootstrap and deploy (ask first), after which `AWS_DEPLOY_ROLE_ARN` and `DEPLOY_ENABLED` can be set.
