@@ -1,77 +1,68 @@
-# CostWatcher: PWA + AWS serverless backend
+# CostWatcher: AWS cost analysis, deeper than Cost Explorer
 
 ## Context
-User wants one app to control SmartThings, Aladdin Connect (garage) and LG ThinQ appliances. Xfinity Home stays separate (no public API). Backend on AWS. User does not want to pay the $99 Apple Developer fee, so the client is an installable PWA (Add to Home Screen on iPhone) instead of a native app. No custom domain (use the CloudFront URL). No customer-managed KMS key and no Secrets Manager.
-
-Why a backend: vendor OAuth secrets/refresh tokens must not live in the browser; backend also normalizes three vendor APIs into one device model and sends push alerts.
+One dark-mode dashboard that answers "what did I spend, on which service, and what used it?" for a single AWS account, in more depth than the console gives. The cost source is the Cost and Usage Report (CUR 2.0, via Data Exports), which has a line item per resource. **No Cost Explorer API calls** (they cost $0.01 each, and its resource-level data only covers 14 days). No custom domain (use the CloudFront URL). No customer-managed KMS key unless cdk-nag requires one. All Lambdas stay outside a VPC (no `vpc` config, no NAT gateway, no VPC endpoints).
 
 ## Stack
-Decision (2026-10-19): Python for infra and backend, TypeScript for the frontend, mirroring the sibling repos `Stocks` and `TennisTracker` so their proven CI, deploy and lockfile setup is reused. The UI is dark mode only; approved mockups are linked from the README.
+Mirrors the sibling repos `Stocks` and `TennisTracker`, so their CI, deploy and lockfile setup is reused: Python 3.14 (arm64 Lambdas), AWS CDK (Python) with cdk-nag, DynamoDB on-demand, API Gateway HTTP API with a Cognito JWT authorizer, and a TypeScript + React + Vite site on S3 + CloudFront. Hashed lockfiles, ruff, pyright, pytest. The UI is dark mode only.
 
-**Frontend (`frontend/`)**: TypeScript, React + Vite, `vite-plugin-pwa` (Workbox) or a hand-written service worker as in TennisTracker, TanStack Query, React Router, Cognito sign-in. Web Push (VAPID) via service worker; works on iOS 16.4+ only when installed to the home screen. Dark theme only.
-
-**Backend (`backend/`)**: Lambda (Python 3.14, arm64), API Gateway HTTP API with Cognito JWT authorizer, DynamoDB on-demand, SSM Parameter Store SecureString for vendor client secrets and VAPID keys (AWS-managed key, no custom KMS), EventBridge for polling/alerts, `pywebpush`-style Web Push (SNS cannot send Web Push).
-
-**Infra (`infra/`)**: AWS CDK (Python) with cdk-nag. Static site on S3 + CloudFront (default `*.cloudfront.net` domain, HTTPS included). **All Lambdas stay outside a VPC** (hard rule: no `vpc` config in CDK, no NAT gateway, no VPC endpoints). They reach DynamoDB, SSM and vendor APIs over the public AWS/internet endpoints.
-
-**Device model**: defined once in the backend (`backend/api/devices.py`) and mirrored in `frontend/src/types.ts`, kept in sync by a contract test. Hashed lockfiles, ruff, pyright, pytest, Vitest, ESLint.
-
-## Layout
+## Data flow
 ```
-CostWatcher/
-  infra/     CDK stack (Cognito, API GW, Lambdas, DynamoDB, SSM params, S3/CloudFront, EventBridge)
-  backend/   handlers + adapters (smartthings, lgthinq)
-  frontend/  React + Vite PWA (dark mode only)
-  docs/      plan, vendor API notes
-  scripts/   helper scripts (connectivity check)
-  tests/     pytest (infra + backend)
+Data Exports (CUR 2.0, Parquet, daily, resource IDs) --> S3 (us-east-1)
+EventBridge (daily) --> Lambda --> Athena (partition projection, no crawler)
+                                      |
+                                      v
+                           DynamoDB (daily aggregates)
+                              |                 |
+                              v                 v
+                    SNS email alerts     API Gateway --> dashboard
 ```
+- The export must be created in `us-east-1` (Data Exports lives there); the rest stays in `us-east-2`.
+- The dashboard reads only DynamoDB, never Athena or AWS billing APIs directly.
+- Delivery lag: the export updates a few times a day, and the first file can take up to 24 hours. There is no same-day figure.
+- No history before the export is created (no Cost Explorer backfill).
 
-## API
-- `GET /devices`, `GET /devices/{id}`, `POST /devices/{id}/commands`
-- `GET /integrations`, `GET /integrations/{vendor}/connect` (start OAuth), `GET /oauth/{vendor}/callback`
-- `POST /push/subscribe`
+## Analysis (beyond what AWS shows)
+1. **Attribution:** project -> service -> resource, with untagged spend shown as "unattributed". Needs cost allocation tags activated in the Billing console (they apply going forward only).
+2. **Drivers:** for a spike, show what changed, such as "+$3.10 from NAT Gateway data processing", by diffing usage types against the prior period.
+3. **Unit costs:** cost per 1,000 Lambda invocations, per GB stored, per million requests.
+4. **Forecast:** month-end projection with a range, which needs a few weeks of history to be useful. Until then use the linear projection (month to date / days elapsed x days in month).
+5. **Waste finder:** idle NAT gateways, unattached EBS volumes, old snapshots, log groups with no retention.
+6. **Alerts (SNS email):** daily total over 2x the trailing 7-day average, a service up by more than a threshold, month on track to pass budget, a service billed for the first time.
+7. **Dependency view** (deferred past v1): which service used which (Lambda -> DynamoDB -> KMS), with cost on the edges.
 
-## Adapter layer
-One interface per vendor: `listDevices()`, `getState()`, `sendCommand()`, mapped to a common model (`id, vendor, name, type, room, state, capabilities`).
-- SmartThings: official REST API, OAuth2 (OAuth-In app).
-- Aladdin Connect: door status + open/close (highest risk, see below).
-- LG ThinQ: official ThinQ Connect API (personal access token, region specific).
+## Dashboard (mockups first, dark mode only)
+- Stacked area chart: daily cost by service, with a toggle to group by project or usage type.
+- Treemap: project -> service -> resource ("which service used it").
+- Sankey: project -> service -> usage type.
+- Spike drill-down: pick a day, see the top drivers and their change.
+- Forecast line against the budget, plus CostWatcher's own cost.
 
 ## Phases
-1. **Verify vendor access first (blocker check): DONE 2026-10-17** via `connectivity/check.mjs` (read-only).
-   - SmartThings: PAT works, 9 devices (lights/plugs, sensors, Schlage lock, hub, tv). Note: new PATs last 24h, so the app needs the OAuth-In flow.
-   - Aladdin Connect: no separate API needed. Both garage doors ("Shria door", "Krish door") appear in SmartThings as "Aladdin Connect (Test)" devices with `doorControl`, `refresh`, `healthCheck`; both online.
-   - LG ThinQ: PAT works (US region `aic`), 2 devices: Kitchen Refrigerator, Dishwasher. Requires accepting LG service terms in the ThinQ app before the PAT site works.
-   - Still untested: sending `doorControl` open/close (do it with the user at the door).
-2. **Skeleton**: pnpm monorepo, CDK stack (Cognito, API GW, DynamoDB, S3/CloudFront), `/devices` with mock data, deploy to dev.
-3. **PWA shell**: login, dashboard, installable manifest + service worker, deployed to CloudFront.
-4. **SmartThings adapter**: OAuth connect flow, list + control devices, including garage doors via `doorControl` (open/close with confirm prompt in UI).
-5. ~~Aladdin adapter~~ dropped: covered by the SmartThings adapter. Fallback if the "(Test)" integration breaks: ratgdo local controller.
-6. **LG ThinQ adapter**: appliance status/controls.
-7. **Push alerts**: VAPID, subscribe endpoint, EventBridge check for "garage open too long".
-8. Hardening: token refresh, rate limiting, error states, log hygiene (never log tokens).
-9. **Siri (deferred, decided later)**: PWAs can't register Siri intents, so use iOS Shortcuts ("Get Contents of URL") calling the API. Needs per-action revocable tokens (hashed in DynamoDB) and a safer rule for garage open (off by default or confirm). Mock up the "Siri & Shortcuts" screen first.
+1. **Docs and mockups** (this PR): plan, roadmap, README, then dark mockups for approval.
+2. **Replace the scaffold:** remove the mock devices API, keep Cognito, hosting, alerts, budget and the deploy role. Add the DynamoDB aggregate table.
+3. **Export and query:** S3 bucket, Data Exports definition, Athena workgroup and table, and the daily ingest Lambda. Ask before the first `cdk bootstrap`/`cdk deploy`.
+4. **Analysis and alerts:** drivers, unit costs, forecast, waste rules, SNS.
+5. **Dashboard:** built from the approved mockups.
+6. **Hardening:** 14-day log retention, error states, own-cost line, and tests with Athena result fixtures.
 
-## Cost (estimates, unverified)
-~$0-2/month: Lambda, Cognito, DynamoDB, SSM standard, EventBridge, CloudFront/S3 are free-tier or pennies; API Gateway ~$0-1. No KMS key, no Secrets Manager, no domain, no Apple fee. Set an AWS Budget alert at $5-10 to catch runaway polling.
+## Cost (estimates, unverified, list prices as known)
+About $0.10-0.50/month: S3 and Athena for one account's Parquet are cents, DynamoDB and API Gateway are cents, Lambda, EventBridge, SNS, Cognito and CloudFront are free tier, and CloudWatch Logs is the largest line (kept small with a 14-day retention). Possible extras: a customer-managed KMS key ($1/month) if cdk-nag requires it. The existing $5 monthly budget alarm guards the tool's own spend.
 
 ## Risks
-- Garage doors depend on SmartThings' "Aladdin Connect (Test)" integration, which could change or stop; monitor, with ratgdo as fallback.
-- LG ThinQ uses a long-lived PAT stored in SSM; scopes limited to what the app needs.
-- iOS web push only works for home-screen-installed PWAs; service worker cache staleness after deploys (use auto-update).
-- Garage control is physical access: require auth + confirmation.
-- Without a custom domain the URL is a random cloudfront.net name (fine for personal use).
+- **Data Exports setup:** the CDK resource (`bcmdataexports.CfnExport`) and its exact table options (daily granularity, resource IDs, Parquet) are unverified; check them before writing the stack.
+- **Delivery lag and no backfill:** early charts are thin; set that expectation in the UI.
+- **Estimated data:** daily figures can be revised until the month closes, so overwrite rather than append.
+- **Untagged resources:** attribution is only as good as the tags; the unattributed bucket must stay visible.
+- **Athena cost creep:** keep Parquet, partition projection, and a bytes-scanned limit on the workgroup.
 
 ## Verification
-- Backend: unit tests per adapter with recorded fixtures; `cdk deploy`, then `curl` with a Cognito token against `/devices`.
-- OAuth: link SmartThings from the PWA, confirm devices appear, toggle a light and verify physically.
-- PWA: Lighthouse PWA audit; install on iPhone via Safari; verify push arrives; test garage open/close on the real door.
+- Unit tests for each analysis rule against small recorded Athena result fixtures.
+- After the first approved deploy: confirm the first export file lands in S3, then run the ingest Lambda by hand and compare one day's total with the Billing console.
+- Dashboard: compare the chart totals with the aggregates in DynamoDB.
 
-## Status (2026-10-17) - resume here
-- Phase 1 complete (see Phases). `connectivity/check.mjs` is a read-only device lister for SmartThings (`SMARTTHINGS_TOKEN`) and LG ThinQ (`LG_PAT`).
-- Default region us-east-2. Nothing deployed yet.
-- Revoke the SmartThings and LG tokens used during testing (they appeared in chat).
-- Mockups approved 2026-10-19 (5 dark screens: dashboard, garage confirm, device detail, accounts, alerts).
-- Next: (1) phase 2 scaffold PR (CDK stack, mock `/devices`, CI), (2) ask before first `cdk bootstrap`/`deploy`, (3) PWA shell PR from the approved mockups, (4) test garage `doorControl` open/close with the user at the door.
-- Ideas and bugs found along the way go in `ROADMAP.md`.
+## Status (2026-10-20) - resume here
+- Renamed from HomeHub; PR #1 (scaffold, CI, rename) merged. Nothing is deployed. The deploy job is off until the repository variable `DEPLOY_ENABLED` is `true`.
+- Decisions: single account, per-resource detail from CUR, no Cost Explorer calls, no backfill, no custom domain, dependency view deferred.
+- Next: dark mockups for approval, then phase 2.
+- Ideas and bugs go in `ROADMAP.md`.
