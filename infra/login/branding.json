@@ -75,7 +75,7 @@
      "itemTextColor": "e6edf3ff"
     },
     "match": {
-     "itemBackgroundColor": "222b36ff",
+     "itemBackgroundColor": "26324aff",
      "itemTextColor": "8ab4ffff"
     }
    },
@@ -121,7 +121,7 @@
      "backgroundColor": "ffffffff",
      "borderColor": "7d8998ff"
     },
-    "placeholderColor": "2a3441ff"
+    "placeholderColor": "33403aff"
    }
   },
   "inputDescription": {
@@ -129,7 +129,7 @@
     "textColor": "8b96a3ff"
    },
    "lightMode": {
-    "textColor": "2a3441ff"
+    "textColor": "33403aff"
    }
   },
   "inputLabel": {
@@ -293,8 +293,8 @@
      },
      "defaults": {
       "backgroundColor": "ffffffff",
-      "borderColor": "222b36ff",
-      "textColor": "222b36ff"
+      "borderColor": "26312bff",
+      "textColor": "26312bff"
      },
      "hover": {
       "backgroundColor": "f2f8fdff",
@@ -384,7 +384,8 @@
     },
     "disabled": {
      "backgroundColor": "1b2330ff",
-     "borderColor": "222b36ff"
+     "borderColor": "2a3441ff",
+     "textColor": "8b96a3ff"
     },
     "hover": {
      "backgroundColor": "b3ceffff",
