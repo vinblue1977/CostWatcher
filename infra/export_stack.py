@@ -1,17 +1,17 @@
 """The Data Export definition. Billing Data Exports only exists in us-east-1, so it gets a stack of its own."""
 
-from aws_cdk import Stack, Tags
+from aws_cdk import Stack
 from aws_cdk import aws_bcmdataexports as bcm
 from constructs import Construct
 
 from infra.cur import EXPORT_NAME, EXPORT_PREFIX, QUERY, bucket_name
-from infra.stack import PROJECT_NAME, project_tag_key
+from infra.tags import tag_project
 
 
 class CurExportStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, *, bucket_region: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
-        Tags.of(self).add(project_tag_key(self), PROJECT_NAME)
+        tag_project(self)
         bcm.CfnExport(
             self,
             "Export",

@@ -318,6 +318,11 @@ def test_resources_carry_the_project_tag_the_ingest_reads() -> None:
     )
     template.has_resource_properties("AWS::S3::Bucket", {"Tags": Match.array_with(expected)})
     template.has_resource_properties("AWS::Lambda::Function", {"Tags": Match.array_with(expected)})
+    template.has_resource_properties("AWS::SNS::Topic", {"Tags": Match.array_with(expected)})
+    template.has_resource_properties("AWS::CloudFront::Distribution", {"Tags": Match.array_with(expected)})
+    template.has_resource_properties("AWS::Athena::WorkGroup", {"Tags": Match.array_with(expected)})
+    template.has_resource_properties("AWS::Logs::LogGroup", {"Tags": Match.array_with(expected)})
+    template.has_resource_properties("AWS::Cognito::UserPool", {"UserPoolTags": {"project": "costwatcher"}})
 
 
 def test_project_tag_key_follows_the_context_the_ingest_uses() -> None:
