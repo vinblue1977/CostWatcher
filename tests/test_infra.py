@@ -175,6 +175,8 @@ def test_api_lambda_can_only_read_the_table() -> None:
     assert "TABLE_NAME" in api["Properties"]["Environment"]["Variables"]
     policies = json.dumps(template.find_resources("AWS::IAM::Policy"))
     assert "dynamodb:Query" in policies
+    for broad in ("Scan", "GetItem", "BatchGetItem"):
+        assert f"dynamodb:{broad}" not in policies
     for write in ("PutItem", "UpdateItem", "DeleteItem", "BatchWriteItem"):
         assert f"dynamodb:{write}" not in policies
 

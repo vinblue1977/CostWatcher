@@ -35,7 +35,7 @@ def _costs(month: str, table: Any = None) -> dict[str, Any]:
         return _json(400, {"error": "month must look like 2026-10"})
     table = table or _days_table()
     items: list[dict[str, Any]] = []
-    query: dict[str, Any] = {"KeyConditionExpression": "PK = :pk AND begins_with(SK, :sk)"}
+    query: dict[str, Any] = {"KeyConditionExpression": "PK = :pk AND begins_with(SK, :sk)", "ConsistentRead": True}
     query["ExpressionAttributeValues"] = {":pk": f"COST#{month}", ":sk": "DAY#"}
     while True:
         page = table.query(**query)
@@ -43,7 +43,7 @@ def _costs(month: str, table: Any = None) -> dict[str, Any]:
         if "LastEvaluatedKey" not in page:
             break
         query["ExclusiveStartKey"] = page["LastEvaluatedKey"]
-    days = [{"date": i["SK"].removeprefix("DAY#"), **{k: v for k, v in i.items() if k not in ("PK", "SK")}} for i in items]
+    days = [{**{k: v for k, v in i.items() if k not in ("PK", "SK")}, "date": i["SK"].removeprefix("DAY#")} for i in items]
     return _json(200, {"month": month, "days": days})
 
 
@@ -55,7 +55,7 @@ def _json(status: int, body: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _number(value: Any) -> float:
+def _number(value: Any) -> int | float:
     if isinstance(value, Decimal):
-        return float(value)
+        return int(value) if value == value.to_integral_value() else float(value)
     raise TypeError(f"not JSON serializable: {type(value).__name__}")

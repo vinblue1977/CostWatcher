@@ -181,7 +181,7 @@ class Web(Construct):
             environment={"TABLE_NAME": table.table_name},
             log_group=logs.LogGroup(self, "ApiLogs", retention=logs.RetentionDays.TWO_WEEKS),
         )
-        table.grant_read_data(fn)  # reads only; the ingest Lambda is the writer
+        table.grant(fn, "dynamodb:Query")  # the one call the handler makes; the ingest Lambda is the writer
         # A burst of crashes (3 in 5 minutes) or throttled calls emails the alert topic.
         for metric_name, metric in (("Errors", fn.metric_errors), ("Throttles", fn.metric_throttles)):
             metric(period=Duration.minutes(5)).create_alarm(

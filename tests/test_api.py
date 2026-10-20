@@ -50,6 +50,14 @@ def test_reads_every_page_of_days() -> None:
     response = api._costs("2026-10", table)
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
-    assert body["days"] == [{"date": "2026-10-01", "total": 1.25}, {"date": "2026-10-02", "total": 2.0}]
+    assert body["days"] == [{"date": "2026-10-01", "total": 1.25}, {"date": "2026-10-02", "total": 2}]
     assert table.queries[1]["ExclusiveStartKey"] == {"PK": "x", "SK": "y"}
     assert table.queries[0]["ExpressionAttributeValues"] == {":pk": "COST#2026-10", ":sk": "DAY#"}
+
+
+def test_handler_routes_to_costs_and_reads_consistently(monkeypatch: Any) -> None:
+    table = FakeTable({"Items": [{"PK": "COST#2026-10", "SK": "DAY#2026-10-03", "date": "bogus", "n": Decimal("3")}]})
+    monkeypatch.setattr(api, "_days_table", lambda: table)
+    response = api.handler(_event(), None)
+    assert json.loads(response["body"])["days"] == [{"date": "2026-10-03", "n": 3}]
+    assert table.queries[0]["ConsistentRead"] is True
