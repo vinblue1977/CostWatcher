@@ -17,6 +17,7 @@
 - Don't open a second PR while one is open, unless it's docs-only. If two are open, run `gh pr update-branch` on the other as soon as one merges, without waiting to be told.
 - `git pull` main before branching. Use a conventional title (`feat:`, `fix:`, `ci:`, `docs:`).
 - Run `make check` before pushing.
+- Run `/code-review` on every PR that changes code, and post the findings as a comment on the PR. Skip it when the PR is docs-only (README, ROADMAP, `docs/`, other Markdown), and say so.
 - After `gh pr create`, run `gh pr merge --auto --squash` yourself. There is no bot auto-merge: merges made with
   `GITHUB_TOKEN` don't start the push run, so the deploy would be skipped.
 - When an earlier PR merges, run `gh pr update-branch <n>` on the PRs still open (branch protection needs them up to date).
