@@ -15,9 +15,9 @@ type State =
   | { kind: "ready"; config: Config; days: Day[] };
 
 const PAGES = [
-  { path: "/", label: "Overview" },
-  { path: "/breakdown", label: "Breakdown" },
-  { path: "/spikes", label: "Spikes" },
+  { path: "/", label: "Overview", icon: "M4 18V11M11 18V5M18 18V9" },
+  { path: "/breakdown", label: "Breakdown", icon: "M3 3h9v9H3zM14 3h5v9h-5zM3 14h5v5H3zM10 14h9v5h-9z" },
+  { path: "/spikes", label: "Spikes", icon: "M2 13h4l3-8 4 12 3-4h4" },
 ] as const;
 
 function usePath(): string {
@@ -97,24 +97,42 @@ export function Shell({ state, path, range, setRange }: { state: Extract<State, 
         <nav aria-label="Primary" className="nav">
           {PAGES.map((p) => (
             <a key={p.path} href={`#${p.path}`} aria-current={p.path === page ? "page" : undefined}>
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d={p.icon} />
+              </svg>
               {p.label}
             </a>
           ))}
         </nav>
         <div className="controls">
           {page !== "/spikes" && (
-            <div role="group" aria-label="Date range" className="segmented">
-              {RANGES.map((r) => (
-                <button key={r} type="button" aria-pressed={r === range} onClick={() => setRange(r)}>
-                  {r}
-                </button>
-              ))}
-            </div>
+            <>
+              <div role="group" aria-label="Date range" className="segmented">
+                {RANGES.map((r) => (
+                  <button key={r} type="button" aria-pressed={r === range} onClick={() => setRange(r)}>
+                    {r}
+                  </button>
+                ))}
+              </div>
+              <label className="range-select">
+                <span className="sr">Date range</span>
+                <select value={range} onChange={(e) => setRange(e.target.value as Range)}>
+                  {RANGES.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
           )}
-          <button type="button" className="quiet" onClick={() => signOut(state.config)}>Sign out</button>
+          <button type="button" className="quiet desktop-only" onClick={() => signOut(state.config)}>Sign out</button>
         </div>
       </header>
-      <main className="page">{body}</main>
+      <main className="page">
+        {body}
+        <button type="button" className="quiet phone-only" onClick={() => signOut(state.config)}>Sign out</button>
+      </main>
     </div>
   );
 }

@@ -43,6 +43,9 @@ h2 { font-size: 16px; font-weight: 600; }
 .nav a { padding: 10px 14px; border-radius: 8px; font-size: 14px; font-weight: 500; }
 .nav a[aria-current="page"] { background: var(--active); color: var(--text); font-weight: 600; }
 .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.nav svg, .range-select, .phone-only { display: none; }
+.range-select select { min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); font-size: 16px; font-weight: 500; }
 .segmented { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
 .segmented button { min-height: 36px; padding: 0 14px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 13px; font-weight: 500; }
 .segmented button[aria-pressed="true"] { background: #26324a; color: var(--text); font-weight: 600; }
@@ -121,15 +124,31 @@ td { padding: 11px 12px 11px 0; border-top: 1px solid var(--line); overflow-wrap
 td.num { font-weight: 600; }
 
 @media (max-width: 640px) {
-  .top { padding: 12px 16px; gap: 12px; }
-  .nav { order: 3; position: fixed; inset: auto 0 0 0; z-index: 2; justify-content: space-around; background: #0f141b; border-top: 1px solid var(--line); padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); }
-  .nav a { flex: 1 1 0; min-height: 48px; display: flex; align-items: center; justify-content: center; font-size: 12px; }
-  .page { padding: 16px 16px 96px; gap: 12px; }
+  .top { padding: calc(12px + env(safe-area-inset-top)) 16px 12px; gap: 12px; justify-content: space-between; flex-wrap: nowrap; }
+  .brand { font-size: 17px; }
+  .segmented, .desktop-only { display: none; }
+  .range-select, .phone-only { display: block; }
+  .phone-only { align-self: flex-start; }
+  .nav { position: fixed; inset: auto 0 0 0; z-index: 2; justify-content: space-around; background: #0f141b; border-top: 1px solid var(--line); padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); }
+  .nav a { flex: 1 1 0; min-height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border-radius: 8px; font-size: 11px; font-weight: 500; }
+  .nav a[aria-current="page"] { background: transparent; color: var(--accent); font-weight: 600; }
+  .nav svg { display: block; }
+  .page { padding: 12px 16px calc(96px + env(safe-area-inset-bottom)); gap: 12px; }
   .panel { padding: 16px 14px; }
-  .card { flex-basis: 140px; padding: 14px; }
+  .panel-head { margin-bottom: 0; }
+  .card { flex: 1 1 calc(50% - 8px); min-width: 0; padding: 14px; }
+  .figures { gap: 10px; }
   .card .value { font-size: 24px; }
-  .ranked li, .movers li { gap: 10px; flex-wrap: wrap; }
+  .card .sub { font-size: 12px; }
+  .alert { padding: 12px 14px; font-size: 13px; }
+  .select select { font-size: 16px; }
+  .ranked li, .movers li { gap: 8px 10px; flex-wrap: wrap; }
   .track { flex: 1 1 100%; order: 5; }
-  .plot, .axis { gap: 3px; }
-  .plot { height: 160px; }
+  .plot { height: 160px; gap: 3px; padding-top: 22px; }
+  .axis { gap: 3px; }
+  .bar .flag { font-size: 10px; padding: 1px 5px; }
+  .meter-legend { flex-direction: column; }
+  .picker { height: 130px; gap: 3px; }
+  .picker button { min-width: 0; }
+  td, th { padding-right: 8px; }
 }

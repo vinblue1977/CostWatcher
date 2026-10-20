@@ -143,7 +143,7 @@ class Web(Construct):
             generate_secret=False,  # public browser client (authorization code + PKCE)
             access_token_validity=Duration.hours(1),
             id_token_validity=Duration.hours(1),
-            refresh_token_validity=Duration.days(30),
+            refresh_token_validity=Duration.days(21),  # signed in on a phone for three weeks, then sign in again
             enable_token_revocation=True,
             o_auth=cognito.OAuthSettings(
                 flows=cognito.OAuthFlows(authorization_code_grant=True),
