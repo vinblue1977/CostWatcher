@@ -64,5 +64,6 @@ About $0.10-0.50/month: S3 and Athena for one account's Parquet are cents, Dynam
 ## Status (2026-10-20) - resume here
 - Renamed from HomeHub; PR #1 (scaffold, CI, rename) merged. Nothing is deployed. The deploy job is off until the repository variable `DEPLOY_ENABLED` is `true`.
 - Decisions: single account, per-resource detail from CUR, no Cost Explorer calls, no backfill, no custom domain, dependency view deferred.
-- Next: dark mockups for approval, then phase 2.
+- Mockups approved 2026-10-20 (5 dark boards: overview, breakdown, spike drill-down, iPhone overview and breakdown). Sankey view not mocked up; add later if wanted.
+- Next: phase 2 (replace the scaffold), then the CUR export and query. The dashboard is built from the approved mockups.
 - Ideas and bugs go in `ROADMAP.md`.

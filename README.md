@@ -6,7 +6,7 @@ Status: planning and scaffolding. Nothing is deployed yet.
 
 - [docs/PLAN.md](docs/PLAN.md): data flow, analysis, phases, risks
 - [ROADMAP.md](ROADMAP.md): ideas and known bugs
-- Mockups (dark mode only): to be linked here once approved
+- Approved mockups (dark mode only, desktop and iPhone, private link, ask the owner): https://claude.ai/artifact/77hmDayYEm6nvxMwiUKjzJ
 
 ## Stack
 
