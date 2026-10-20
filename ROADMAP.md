@@ -1,6 +1,6 @@
 # Roadmap
 
-Ideas and bugs found while building HomeHub. The phased build plan is in [docs/PLAN.md](docs/PLAN.md).
+Ideas and bugs found while building CostWatcher. The phased build plan is in [docs/PLAN.md](docs/PLAN.md).
 
 ## Ideas
 
@@ -15,6 +15,11 @@ Ideas and bugs found while building HomeHub. The phased build plan is in [docs/P
 
 ## Bugs and risks
 
+- **SPA fallback hides missing files.** CloudFront turns every S3 403/404 into a 200 `index.html`, so a missing `config.json` or hashed asset returns HTML. Scope the fallback to extensionless paths with a CloudFront Function when the real PWA ships.
+- **Alerts vanish if `alertEmail` is omitted.** The budget and email subscription only exist when `-c alertEmail=...` is passed, so a local `cdk deploy` without it removes them. CI always passes it; always pass it locally too (or move it into context once private config is decided).
+- **The API Lambda has no table access.** It was given none on purpose until the adapters store tokens; add the narrowest grant then (and the cdk-nag index suppression).
+- **Garage open is gated by `confirm=true` in the API.** The real adapter must keep that rule, and `/devices/{id}/commands` should log who sent it once the user id is passed to handlers.
+- **Local PWA development needs `-c devOrigin=true`.** localhost:5173 is not allowed on the deployed pool or API by default.
 - **SmartThings personal tokens last 24 hours.** The app must use the OAuth-In flow; do not rely on a stored personal token.
 - **Garage doors depend on a "(Test)" integration.** Monitor it; the app should show "state unknown" instead of a stale "Closed" when a door stops reporting.
 - **Open and close are untested.** `doorControl` open/close has not been tried; do it with someone at the door before trusting it.

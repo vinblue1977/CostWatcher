@@ -1,4 +1,4 @@
-# HomeHub
+# CostWatcher
 
 One dark-mode app for the house: SmartThings devices (lights, plugs, the Schlage lock and both garage doors) and LG ThinQ appliances, on serverless AWS. It installs on an iPhone as a PWA (Add to Home Screen), so no Apple Developer account is needed. Xfinity Home stays in its own app (no public API).
 

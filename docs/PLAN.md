@@ -1,4 +1,4 @@
-# HomeHub: PWA + AWS serverless backend
+# CostWatcher: PWA + AWS serverless backend
 
 ## Context
 User wants one app to control SmartThings, Aladdin Connect (garage) and LG ThinQ appliances. Xfinity Home stays separate (no public API). Backend on AWS. User does not want to pay the $99 Apple Developer fee, so the client is an installable PWA (Add to Home Screen on iPhone) instead of a native app. No custom domain (use the CloudFront URL). No customer-managed KMS key and no Secrets Manager.
@@ -18,7 +18,7 @@ Decision (2026-10-19): Python for infra and backend, TypeScript for the frontend
 
 ## Layout
 ```
-HomeHub/
+CostWatcher/
   infra/     CDK stack (Cognito, API GW, Lambdas, DynamoDB, SSM params, S3/CloudFront, EventBridge)
   backend/   handlers + adapters (smartthings, lgthinq)
   frontend/  React + Vite PWA (dark mode only)

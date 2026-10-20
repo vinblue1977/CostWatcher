@@ -1,0 +1,49 @@
+# Weekly update PRs for GitHub Actions (keeps the pinned commit SHAs current), Python and npm dependencies.
+# Titles follow Conventional Commits ("ci(deps): ...", "build(deps): ...") to pass the PR title check.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7  # skip releases younger than a week (time for a bad release to be caught and pulled)
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      actions:
+        patterns: ["*"]
+  # The CDK app and dev tools (requirements*.in; hashed lockfiles beside them).
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: build
+      include: scope
+    groups:
+      python:
+        patterns: ["*"]
+    ignore:
+      # cdk-nag 3 replaces the suppression API (experimental, no grouped acknowledgments yet).
+      - dependency-name: cdk-nag
+        versions: [">=3.0.0"]
+  # The CDK CLI that deploys and pyright (package.json).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: build
+      include: scope
+    groups:
+      dev-tools:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]

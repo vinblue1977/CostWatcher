@@ -1,0 +1,12 @@
+{
+  "name": "home-hub-dev",
+  "private": true,
+  "description": "Dev tools only (pyright, the CDK CLI that deploys); nothing here ships to AWS.",
+  "engines": {
+    "node": "^20.19.0 || ^22.13.0 || >=24"
+  },
+  "devDependencies": {
+    "aws-cdk": "2.1145.0",
+    "pyright": "1.1.414"
+  }
+}

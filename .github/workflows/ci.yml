@@ -1,0 +1,262 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 13 * * 1"  # weekly, so new advisories against current dependency versions fail `make audit`
+  workflow_dispatch:
+
+# Least privilege by default.
+permissions:
+  contents: read
+
+# Superseded PR runs are cancelled; each run on main gets its own group so none is dropped while pending.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# A push to main is always a merged PR (branch protection) that was up to date with main, so checks and
+# workflow-lint skip pushes; the deploy re-runs only the audit, which catches advisories published since the PR.
+jobs:
+  # Decides whether checks and workflow-lint run: always on schedule and manual runs; on a PR only if something
+  # besides docs (docs/ or top-level Markdown) changed. GitHub counts a skipped required job as passed.
+  scope:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-24.04  # pinned; ubuntu-latest moves to 26 on 2026-10-19
+    timeout-minutes: 5
+    outputs:
+      run_checks: ${{ steps.diff.outputs.run_checks }}
+      deps_changed: ${{ steps.diff.outputs.deps_changed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: diff
+        run: |
+          if [ "$EVENT" != pull_request ]; then printf 'run_checks=true\ndeps_changed=true\n' >> "$GITHUB_OUTPUT"; exit 0; fi
+          # --no-renames: a code file moved into docs/ shows as deleted from its old path, so it counts as code.
+          changed="$(git diff --name-only --no-renames "$BASE...$HEAD")"
+          echo "$changed"
+          code="$(grep -Ev '^(docs/|[^/]+\.md$)' <<<"$changed" || true)"
+          echo "run_checks=$([ -z "$changed" ] || [ -n "$code" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          # Python packages only change with the requirements files; the weekly run and every deploy still audit.
+          echo "deps_changed=$(grep -qE '(^|/)requirements[^/]*\.(txt|in)$' <<<"$changed" && echo true || echo false)" >> "$GITHUB_OUTPUT"
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+
+  python:
+    needs: scope
+    if: needs.scope.outputs.run_checks == 'true'
+    runs-on: ubuntu-24.04  # pinned; ubuntu-latest moves to 26 on 2026-10-19
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.14"
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: "0.12.19"
+          enable-cache: true
+          cache-dependency-glob: requirements*.txt
+      - name: Install Python dependencies (uv; --seed keeps pip in the venv)
+        run: |
+          uv venv --seed --python "$(which python)" .venv
+          uv pip install --python .venv/bin/python --require-hashes -r requirements-dev.txt
+          uv pip check --python .venv/bin/python
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm  # pyright and the CDK CLI, keyed on package-lock.json
+      - name: Install pyright and the CDK CLI (exact versions; no install scripts)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Lint (ruff with Bandit security rules, pyright types)
+        run: make lint
+      - name: Unit and infrastructure tests (parallel)
+        run: make test
+
+  synth:
+    needs: scope
+    if: needs.scope.outputs.run_checks == 'true'
+    runs-on: ubuntu-24.04  # pinned; ubuntu-latest moves to 26 on 2026-10-19
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.14"
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: "0.12.19"
+          enable-cache: true
+          cache-dependency-glob: requirements*.txt
+      - name: Install Python dependencies (uv; --seed keeps pip in the venv)
+        run: |
+          uv venv --seed --python "$(which python)" .venv
+          uv pip install --python .venv/bin/python --require-hashes -r requirements-dev.txt
+          uv pip check --python .venv/bin/python
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm  # the CDK CLI, keyed on package-lock.json
+      - name: Install the CDK CLI (exact version; no install scripts)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Dependency vulnerability audit (when requirements change; weekly and on deploy regardless)
+        if: needs.scope.outputs.deps_changed == 'true'
+        run: make audit
+      - name: Synthesize and run cdk-nag security checks (stand-in site files)
+        run: make synth SITE_DIR=tests/fixtures/site
+
+  checks:
+    needs: [scope, python, synth]
+    # Not on cancelled runs (a newer push supersedes them), so they don't show a misleading failure.
+    if: ${{ !cancelled() && needs.scope.outputs.run_checks == 'true' }}
+    runs-on: ubuntu-24.04  # pinned; ubuntu-latest moves to 26 on 2026-10-19
+    timeout-minutes: 2
+    steps:
+      - name: All checks passed
+        run: |
+          echo "python=$PY synth=$SY"
+          [ "$PY" = success ] && [ "$SY" = success ]
+        env:
+          PY: ${{ needs.python.result }}
+          SY: ${{ needs.synth.result }}
+
+  # Lints the workflow files: actionlint (syntax, expressions, shell) and zizmor (Actions security).
+  workflow-lint:
+    needs: scope
+    if: needs.scope.outputs.run_checks == 'true'
+    runs-on: ubuntu-24.04  # pinned; ubuntu-latest moves to 26 on 2026-10-19
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: actionlint
+        # The release binary, checked against its published SHA-256 before it runs.
+        run: |
+          curl -sSfLo actionlint.tar.gz https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  actionlint.tar.gz" | sha256sum -c -
+          tar xzf actionlint.tar.gz actionlint
+          # One GitHub annotation per finding (the line break inside the quotes ends each one).
+          # shellcheck disable=SC2016  # $err is actionlint's template variable, not a shell one
+          ./actionlint -format '{{range $err := .}}::error file={{$err.Filepath}},line={{$err.Line}},col={{$err.Column}}::{{$err.Message}}
+          {{end}}'
+      - uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482  # v0.6.4
+        with:
+          inputs: .github
+          version: "1.30.1"
+          advanced-security: false  # findings as PR annotations, not uploaded to code scanning
+          annotations: true
+
+  # Fails a PR that adds a dependency with a known high-severity vulnerability.
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04  # pinned; ubuntu-latest moves to 26 on 2026-10-19
+    timeout-minutes: 5
+    steps:
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294  # v5.0.0
+        with:
+          fail-on-severity: high
+
+  # Decides whether a push to main deploys: anything outside docs, Markdown, tests, scripts and CI config
+  # (except this workflow, which holds the deploy step). A manual run on main always deploys: merges made by
+  # GITHUB_TOKEN don't start a push run, so `gh workflow run ci.yml --ref main` covers them.
+  changes:
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04  # pinned; ubuntu-latest moves to 26 on 2026-10-19
+    timeout-minutes: 5
+    outputs:
+      deploy: ${{ steps.diff.outputs.deploy }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: diff
+        run: |
+          # The whole push range; an unknown base (new branch, force push, manual run) deploys.
+          if [ "$EVENT" = workflow_dispatch ]; then
+            changed="manual-run"
+          elif git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            changed="$(git diff --name-only "$BEFORE" "$GITHUB_SHA")"
+          else
+            changed="unknown-base"
+          fi
+          echo "$changed"
+          deployable="$(grep -Ev '^(docs/|\.github/|tests/|scripts/|LICENSE$|pyrightconfig\.json$)|\.md$' <<<"$changed" || true)"
+          if grep -qx '.github/workflows/ci.yml' <<<"$changed"; then deployable=yes; fi
+          echo "deploy=$([ -n "$deployable" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+        env:
+          BEFORE: ${{ github.event.before }}
+          EVENT: ${{ github.event_name }}
+
+  deploy:
+    needs: changes
+    # Off until the repository variable DEPLOY_ENABLED is "true": the first deploy needs explicit approval.
+    if: needs.changes.outputs.deploy == 'true' && vars.DEPLOY_ENABLED == 'true'
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04  # pinned; ubuntu-latest moves to 26 on 2026-10-19
+    timeout-minutes: 30
+    environment: production   # deployment branches: main only (repo settings)
+    permissions:
+      contents: read
+      id-token: write   # GitHub OIDC -> short-lived AWS credentials, no stored access keys
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.14"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm  # the pinned CDK CLI, keyed on package-lock.json
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: "0.12.19"
+          enable-cache: true
+          cache-dependency-glob: requirements*.txt
+      - name: Build (no AWS credentials yet, hash-checked dev tools install here)
+        run: |
+          uv venv --seed --python "$(which python)" .venv
+          uv pip install --python .venv/bin/python --require-hashes -r requirements-dev.txt
+          make audit  # an advisory published since the PR stops the deploy (the PR already ran the tests)
+          npm ci --ignore-scripts --no-audit --no-fund  # the pinned CDK CLI (package-lock.json)
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd  # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-2' }}
+          mask-aws-account-id: true  # public repo: logs are public
+      - name: Deploy
+        run: |
+          : "${ALERT_EMAIL:?set the ALERT_EMAIL secret}"  # a missing secret would silently drop failure emails
+          . .venv/bin/activate
+          npx --no-install cdk deploy --require-approval never -c alertEmail="$ALERT_EMAIL" --outputs-file cdk-outputs.json
+        env:
+          ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}  # environment secret, masked in logs
+      - name: Smoke test
+        run: |
+          table="$(jq -er '.CostWatcher.TableName' cdk-outputs.json)"
+          site="$(jq -er '.CostWatcher.SiteUrl' cdk-outputs.json)"
+          api="$(jq -er '.CostWatcher.ApiUrl' cdk-outputs.json)"
+          [ "$(aws dynamodb describe-table --table-name "$table" --query 'Table.TableStatus' --output text)" = ACTIVE ]
+          check() {
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 --retry 3 --retry-all-errors "$2")"
+            echo "$2 -> $code (want $1)"; [ "$code" = "$1" ]
+          }
+          check 200 "$site/"
+          check 401 "$api/devices"  # sign-in required
