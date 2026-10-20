@@ -57,7 +57,7 @@
   },
   "divider": {
    "darkMode": {
-    "borderColor": "26312bff"
+    "borderColor": "222b36ff"
    },
    "lightMode": {
     "borderColor": "ebebf0ff"
@@ -67,16 +67,16 @@
    "borderRadius": 8.0,
    "darkMode": {
     "defaults": {
-     "itemBackgroundColor": "24302aff"
+     "itemBackgroundColor": "1b2330ff"
     },
     "hover": {
-     "itemBackgroundColor": "1a231eff",
-     "itemBorderColor": "33403aff",
-     "itemTextColor": "eef2ecff"
+     "itemBackgroundColor": "151b23ff",
+     "itemBorderColor": "2a3441ff",
+     "itemTextColor": "e6edf3ff"
     },
     "match": {
-     "itemBackgroundColor": "26312bff",
-     "itemTextColor": "d7f04bff"
+     "itemBackgroundColor": "26324aff",
+     "itemTextColor": "8ab4ffff"
     }
    },
    "lightMode": {
@@ -96,7 +96,7 @@
   },
   "focusState": {
    "darkMode": {
-    "borderColor": "d7f04bff"
+    "borderColor": "8ab4ffff"
    },
    "lightMode": {
     "borderColor": "0972d3ff"
@@ -111,10 +111,10 @@
    "borderRadius": 8.0,
    "darkMode": {
     "defaults": {
-     "backgroundColor": "24302aff",
-     "borderColor": "33403aff"
+     "backgroundColor": "1b2330ff",
+     "borderColor": "2a3441ff"
     },
-    "placeholderColor": "7d8a83ff"
+    "placeholderColor": "8b96a3ff"
    },
    "lightMode": {
     "defaults": {
@@ -126,7 +126,7 @@
   },
   "inputDescription": {
    "darkMode": {
-    "textColor": "7d8a83ff"
+    "textColor": "8b96a3ff"
    },
    "lightMode": {
     "textColor": "33403aff"
@@ -134,7 +134,7 @@
   },
   "inputLabel": {
    "darkMode": {
-    "textColor": "eef2ecff"
+    "textColor": "e6edf3ff"
    },
    "lightMode": {
     "textColor": "000716ff"
@@ -143,10 +143,10 @@
   "link": {
    "darkMode": {
     "defaults": {
-     "textColor": "d7f04bff"
+     "textColor": "8ab4ffff"
     },
     "hover": {
-     "textColor": "e4f57fff"
+     "textColor": "b3ceffff"
     }
    },
    "lightMode": {
@@ -161,12 +161,12 @@
   "optionControls": {
    "darkMode": {
     "defaults": {
-     "backgroundColor": "24302aff",
-     "borderColor": "7d8a83ff"
+     "backgroundColor": "1b2330ff",
+     "borderColor": "8b96a3ff"
     },
     "selected": {
-     "backgroundColor": "d7f04bff",
-     "foregroundColor": "0e1411ff"
+     "backgroundColor": "8ab4ffff",
+     "foregroundColor": "0d1117ff"
     }
    },
    "lightMode": {
@@ -251,8 +251,8 @@
    },
    "borderRadius": 8.0,
    "darkMode": {
-    "backgroundColor": "1a231eff",
-    "borderColor": "26312bff"
+    "backgroundColor": "151b23ff",
+    "borderColor": "222b36ff"
    },
    "lightMode": {
     "backgroundColor": "ffffffff",
@@ -270,19 +270,19 @@
    "standard": {
     "darkMode": {
      "active": {
-      "backgroundColor": "33403aff",
-      "borderColor": "d7f04bff",
-      "textColor": "d7f04bff"
+      "backgroundColor": "2a3441ff",
+      "borderColor": "8ab4ffff",
+      "textColor": "8ab4ffff"
      },
      "defaults": {
-      "backgroundColor": "24302aff",
-      "borderColor": "a3b0a8ff",
-      "textColor": "a3b0a8ff"
+      "backgroundColor": "1b2330ff",
+      "borderColor": "9da7b3ff",
+      "textColor": "9da7b3ff"
      },
      "hover": {
-      "backgroundColor": "24302aff",
-      "borderColor": "d7f04bff",
-      "textColor": "d7f04bff"
+      "backgroundColor": "1b2330ff",
+      "borderColor": "8ab4ffff",
+      "textColor": "8ab4ffff"
      }
     },
     "lightMode": {
@@ -306,7 +306,7 @@
   },
   "pageBackground": {
    "darkMode": {
-    "color": "0e1411ff"
+    "color": "0d1117ff"
    },
    "image": {
     "enabled": false
@@ -321,9 +321,9 @@
    },
    "darkMode": {
     "background": {
-     "color": "0e1411ff"
+     "color": "0d1117ff"
     },
-    "borderColor": "26312bff"
+    "borderColor": "222b36ff"
    },
    "lightMode": {
     "background": {
@@ -342,9 +342,9 @@
    },
    "darkMode": {
     "background": {
-     "color": "0e1411ff"
+     "color": "0d1117ff"
     },
-    "borderColor": "26312bff"
+    "borderColor": "222b36ff"
    },
    "lightMode": {
     "background": {
@@ -359,9 +359,9 @@
   },
   "pageText": {
    "darkMode": {
-    "bodyColor": "a3b0a8ff",
-    "descriptionColor": "a3b0a8ff",
-    "headingColor": "eef2ecff"
+    "bodyColor": "9da7b3ff",
+    "descriptionColor": "9da7b3ff",
+    "headingColor": "e6edf3ff"
    },
    "lightMode": {
     "bodyColor": "414d5cff",
@@ -375,20 +375,21 @@
   "primaryButton": {
    "darkMode": {
     "active": {
-     "backgroundColor": "d7f04bff",
-     "textColor": "0e1411ff"
+     "backgroundColor": "8ab4ffff",
+     "textColor": "0d1117ff"
     },
     "defaults": {
-     "backgroundColor": "d7f04bff",
-     "textColor": "0e1411ff"
+     "backgroundColor": "8ab4ffff",
+     "textColor": "0d1117ff"
     },
     "disabled": {
-     "backgroundColor": "24302aff",
-     "borderColor": "26312bff"
+     "backgroundColor": "1b2330ff",
+     "borderColor": "2a3441ff",
+     "textColor": "8b96a3ff"
     },
     "hover": {
-     "backgroundColor": "e4f57fff",
-     "textColor": "0e1411ff"
+     "backgroundColor": "b3ceffff",
+     "textColor": "0d1117ff"
     }
    },
    "lightMode": {
@@ -413,19 +414,19 @@
   "secondaryButton": {
    "darkMode": {
     "active": {
-     "backgroundColor": "26312bff",
-     "borderColor": "e4f57fff",
-     "textColor": "e4f57fff"
+     "backgroundColor": "222b36ff",
+     "borderColor": "b3ceffff",
+     "textColor": "b3ceffff"
     },
     "defaults": {
-     "backgroundColor": "24302aff",
-     "borderColor": "d7f04bff",
-     "textColor": "d7f04bff"
+     "backgroundColor": "1b2330ff",
+     "borderColor": "8ab4ffff",
+     "textColor": "8ab4ffff"
     },
     "hover": {
-     "backgroundColor": "26312bff",
-     "borderColor": "e4f57fff",
-     "textColor": "e4f57fff"
+     "backgroundColor": "222b36ff",
+     "borderColor": "b3ceffff",
+     "textColor": "b3ceffff"
     }
    },
    "lightMode": {
