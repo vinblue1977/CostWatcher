@@ -6,12 +6,12 @@ import os
 import aws_cdk as cdk
 from cdk_nag import AwsSolutionsChecks
 
-from infra.stack import HomeHubStack
+from infra.stack import CostWatcherStack
 
 app = cdk.App()
-HomeHubStack(
+CostWatcherStack(
     app,
-    "HomeHub",
+    "CostWatcher",
     env=cdk.Environment(
         account=os.environ.get("CDK_DEFAULT_ACCOUNT"),
         region="us-east-2",  # fixed: the CDK CLI defaults to us-east-1 without credentials

@@ -1,6 +1,6 @@
 # Roadmap
 
-Ideas and bugs found while building HomeHub. The phased build plan is in [docs/PLAN.md](docs/PLAN.md).
+Ideas and bugs found while building CostWatcher. The phased build plan is in [docs/PLAN.md](docs/PLAN.md).
 
 ## Ideas
 

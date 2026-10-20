@@ -1,4 +1,4 @@
-"""The HomeHub stack: data table, sign-in, API, hosting, alerts, budget and the GitHub deploy role."""
+"""The CostWatcher stack: data table, sign-in, API, hosting, alerts, budget and the GitHub deploy role."""
 
 import re
 
@@ -16,7 +16,7 @@ from infra.web import Web
 GITHUB = "token.actions.githubusercontent.com"
 
 
-class HomeHubStack(Stack):
+class CostWatcherStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 

@@ -249,9 +249,9 @@ jobs:
           ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}  # environment secret, masked in logs
       - name: Smoke test
         run: |
-          table="$(jq -er '.HomeHub.TableName' cdk-outputs.json)"
-          site="$(jq -er '.HomeHub.SiteUrl' cdk-outputs.json)"
-          api="$(jq -er '.HomeHub.ApiUrl' cdk-outputs.json)"
+          table="$(jq -er '.CostWatcher.TableName' cdk-outputs.json)"
+          site="$(jq -er '.CostWatcher.SiteUrl' cdk-outputs.json)"
+          api="$(jq -er '.CostWatcher.ApiUrl' cdk-outputs.json)"
           [ "$(aws dynamodb describe-table --table-name "$table" --query 'Table.TableStatus' --output text)" = ACTIVE ]
           check() {
             code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 --retry 3 --retry-all-errors "$2")"

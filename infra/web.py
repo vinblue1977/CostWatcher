@@ -52,7 +52,7 @@ class Web(Construct):
             removal_policy=RemovalPolicy.DESTROY,
             auto_delete_objects=True,
         )
-        auth_prefix = f"homehub-{Aws.ACCOUNT_ID}"
+        auth_prefix = f"costwatcher-{Aws.ACCOUNT_ID}"
         auth_url = f"https://{auth_prefix}.auth.{region}.amazoncognito.com"
         cognito_api = f"https://cognito-idp.{region}.amazonaws.com"  # SRP and passkey calls from the browser
         dev_origins = [DEV_ORIGIN] if self.node.try_get_context("devOrigin") in (True, "true") else []

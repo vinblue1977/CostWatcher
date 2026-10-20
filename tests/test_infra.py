@@ -9,7 +9,7 @@ import pytest
 from aws_cdk.assertions import Annotations, Match, Template
 from cdk_nag import AwsSolutionsChecks
 
-from infra.stack import HomeHubStack
+from infra.stack import CostWatcherStack
 
 REPO = "test-owner@1/test-repo@2"
 # The same feature flags as a real synth, so tests render the template the way a deploy does.
@@ -17,15 +17,15 @@ CDK_CONTEXT = {k: v for k, v in json.loads(Path("cdk.json").read_text())["contex
 CDK_CONTEXT["siteDir"] = "tests/fixtures/site"  # a stand-in app, so tests don't need a frontend build
 
 
-def _stack(context: dict | None = None, account: str | None = "123456789012") -> HomeHubStack:
+def _stack(context: dict | None = None, account: str | None = "123456789012") -> CostWatcherStack:
     app = cdk.App(context=CDK_CONTEXT | ({"githubRepo": REPO} if context is None else context))
-    stack = HomeHubStack(app, "HomeHub", env=cdk.Environment(account=account, region="us-east-2"))
+    stack = CostWatcherStack(app, "CostWatcher", env=cdk.Environment(account=account, region="us-east-2"))
     cdk.Aspects.of(app).add(AwsSolutionsChecks())
     return stack
 
 
 @functools.cache
-def _synthesized(context: str | None = None, account: str | None = "123456789012") -> tuple[HomeHubStack, Template]:
+def _synthesized(context: str | None = None, account: str | None = "123456789012") -> tuple[CostWatcherStack, Template]:
     """A stack and its template, built once per context (as JSON) and account: synthesizing is the slow part of these tests."""
     stack = _stack(None if context is None else json.loads(context), account)
     return stack, Template.from_stack(stack)
