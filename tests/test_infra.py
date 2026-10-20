@@ -207,6 +207,7 @@ def test_export_bucket_is_private_kept_and_open_only_to_this_accounts_exports() 
     for service in ("bcm-data-exports.amazonaws.com", "billingreports.amazonaws.com"):
         assert service in policies
     assert policies.count("aws:SourceAccount") >= 1 and "aws:SourceArn" in policies
+    assert "/*" in policies and "/cur/*" not in policies  # AWS's policy covers the whole bucket
 
 
 def test_athena_is_capped_and_encrypted_and_reads_partitions_by_projection() -> None:

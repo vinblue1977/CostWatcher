@@ -63,7 +63,8 @@ class Cur(Construct):
         # Billing's export services write into this bucket, only for this account's exports (confused-deputy guard).
         delivery = iam.PolicyStatement(
             actions=["s3:GetBucketPolicy", "s3:PutObject"],
-            resources=[bucket.bucket_arn, bucket.arn_for_objects(f"{EXPORT_PREFIX}/*")],
+            # The whole bucket, as AWS's required policy has it: its create-time check fails on a narrower prefix.
+            resources=[bucket.bucket_arn, bucket.arn_for_objects("*")],
             principals=[iam.ServicePrincipal(p) for p in ("bcm-data-exports.amazonaws.com", "billingreports.amazonaws.com")],  # pyright: ignore[reportArgumentType]
             conditions={
                 "StringEquals": {"aws:SourceAccount": stack.account},
