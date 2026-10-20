@@ -1,0 +1,87 @@
+import { describe, expect, it } from "vitest";
+import { baseline, drivers, forecast, friendly, inRange, isSpike, latestSpike, money, movers, shiftDate, stack } from "./model";
+import type { Day } from "./model";
+
+function day(date: string, total: number, services: Record<string, number> = { S3: total }, usageTypes: Record<string, number> = {}): Day {
+  return { date, total, services, projects: {}, usageTypes };
+}
+const steady = (n: number, total = 1, from = "2026-10-01") =>
+  Array.from({ length: n }, (_, i) => day(shiftDate(from, i), total));
+
+describe("ranges", () => {
+  it("ends on the newest day and crosses month boundaries", () => {
+    const days = steady(40, 1, "2026-09-01"); // Sep 1 to Oct 10
+    expect(inRange(days, "7d").map((d) => d.date)).toEqual(Array.from({ length: 7 }, (_, i) => shiftDate("2026-10-04", i)));
+    expect(inRange(days, "MTD")).toHaveLength(10);
+    expect(inRange([], "14d")).toEqual([]);
+  });
+});
+
+describe("stack", () => {
+  it("keeps the top keys and folds the rest into Other", () => {
+    const days = [day("2026-10-01", 10, { A: 5, B: 3, C: 1, D: 0.5, E: 0.3, F: 0.2 })];
+    const s = stack(days, "services", 3);
+    expect(s.names).toEqual(["A", "B", "C", "Other"]);
+    expect(s.rows[0]?.parts).toEqual([5, 3, 1, 1]);
+  });
+  it("has no Other column when everything fits", () => {
+    expect(stack([day("2026-10-01", 1)], "services").names).toEqual(["S3"]);
+  });
+});
+
+describe("movers", () => {
+  it("compares the last 7 days with the 7 before and waits for the earlier week", () => {
+    expect(movers(steady(7))).toBeNull();
+    const days = [...steady(7, 1, "2026-10-01"), ...Array.from({ length: 7 }, (_, i) => day(shiftDate("2026-10-08", i), 2, { S3: 1, AmazonBedrock: 1 }))];
+    const result = movers(days);
+    expect(result?.[0]).toMatchObject({ name: "AmazonBedrock", delta: 7, pct: null });
+    expect(result?.find((m) => m.name === "S3")).toBeUndefined(); // unchanged
+  });
+});
+
+describe("forecast", () => {
+  it("projects the average day over the days left", () => {
+    const f = forecast([day("2026-10-01", 2), day("2026-10-02", 4)]);
+    expect(f).toMatchObject({ spent: 6, projected: 93, low: 93, high: 93 });
+  });
+  it("opens a range after a week of varying days and never goes below what is spent", () => {
+    const f = forecast(Array.from({ length: 7 }, (_, i) => day(shiftDate("2026-10-01", i), i + 1)));
+    expect(f && f.low < f.projected && f.projected < f.high && f.low >= f.spent).toBe(true);
+  });
+  it("uses only the newest month", () => {
+    const f = forecast([day("2026-09-30", 100), day("2026-10-01", 1)]);
+    expect(f?.spent).toBe(1);
+  });
+  it("is null with no days", () => expect(forecast([])).toBeNull());
+});
+
+describe("spikes", () => {
+  it("needs a week of history, then compares with its average", () => {
+    expect(baseline(steady(7), "2026-10-07")).toBeNull();
+    expect(baseline(steady(7), "2026-10-08")?.usual).toBe(1);
+  });
+  it("ignores pennies and small rises", () => {
+    expect(isSpike(0.4, 0.1)).toBe(false);
+    expect(isSpike(1.9, 1)).toBe(false);
+    expect(isSpike(4.08, 1.04)).toBe(true);
+  });
+  it("finds the newest spike and what drove it", () => {
+    const days = [...steady(7), day("2026-10-08", 9, { S3: 1, AmazonVPC: 8 }), day("2026-10-09", 1)];
+    const found = latestSpike(days);
+    expect(found?.day.date).toBe("2026-10-08");
+    const moved = drivers(found!.day.services, found!.base.services);
+    expect(moved[0]).toMatchObject({ name: "AmazonVPC", delta: 8 });
+  });
+});
+
+describe("formatting", () => {
+  it("splits service codes into words", () => {
+    expect(friendly("AmazonBedrock")).toBe("Amazon Bedrock");
+    expect(friendly("AWSLambda")).toBe("AWS Lambda");
+    expect(friendly("web")).toBe("web");
+  });
+  it("formats money with the sign in front", () => {
+    expect(money(1234.5)).toBe("$1,234.50");
+    expect(money(-0.5)).toBe("-$0.50");
+  });
+});

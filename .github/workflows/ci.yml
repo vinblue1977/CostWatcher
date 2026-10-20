@@ -83,6 +83,26 @@ jobs:
       - name: Unit and infrastructure tests (parallel)
         run: make test
 
+  # The dashboard: typecheck, unit tests and a production build (the same build the deploy ships).
+  site:
+    needs: scope
+    if: needs.scope.outputs.run_checks == 'true'
+    runs-on: ubuntu-24.04  # pinned; ubuntu-latest moves to 26 on 2026-10-19
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - name: Install the dashboard's dependencies (exact versions; no install scripts)
+        run: npm ci --prefix site --ignore-scripts --no-audit --no-fund
+      - name: Typecheck, test and build
+        run: make site
+
   synth:
     needs: scope
     if: needs.scope.outputs.run_checks == 'true'
@@ -118,7 +138,7 @@ jobs:
         run: make synth SITE_DIR=tests/fixtures/site
 
   checks:
-    needs: [scope, python, synth]
+    needs: [scope, python, synth, site]
     # Not on cancelled runs (a newer push supersedes them), so they don't show a misleading failure.
     if: ${{ !cancelled() && needs.scope.outputs.run_checks == 'true' }}
     runs-on: ubuntu-24.04  # pinned; ubuntu-latest moves to 26 on 2026-10-19
@@ -126,11 +146,12 @@ jobs:
     steps:
       - name: All checks passed
         run: |
-          echo "python=$PY synth=$SY"
-          [ "$PY" = success ] && [ "$SY" = success ]
+          echo "python=$PY synth=$SY site=$SI"
+          [ "$PY" = success ] && [ "$SY" = success ] && [ "$SI" = success ]
         env:
           PY: ${{ needs.python.result }}
           SY: ${{ needs.synth.result }}
+          SI: ${{ needs.site.result }}
 
   # Lints the workflow files: actionlint (syntax, expressions, shell) and zizmor (Actions security).
   workflow-lint:
@@ -224,7 +245,10 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version: "22"
-          cache: npm  # the pinned CDK CLI, keyed on package-lock.json
+          cache: npm  # the pinned CDK CLI and the dashboard, keyed on their lockfiles
+          cache-dependency-path: |
+            package-lock.json
+            site/package-lock.json
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
         with:
           version: "0.12.19"
@@ -236,6 +260,8 @@ jobs:
           uv pip install --python .venv/bin/python --require-hashes -r requirements-dev.txt
           make audit  # an advisory published since the PR stops the deploy (the PR already ran the tests)
           npm ci --ignore-scripts --no-audit --no-fund  # the pinned CDK CLI (package-lock.json)
+          npm ci --prefix site --ignore-scripts --no-audit --no-fund
+          npm run --prefix site build  # site/dist, which the stack deploys
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd  # v6.3.0
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
