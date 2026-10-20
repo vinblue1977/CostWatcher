@@ -203,7 +203,8 @@ jobs:
 
   deploy:
     needs: changes
-    if: needs.changes.outputs.deploy == 'true'
+    # Off until the repository variable DEPLOY_ENABLED is "true": the first deploy needs explicit approval.
+    if: needs.changes.outputs.deploy == 'true' && vars.DEPLOY_ENABLED == 'true'
     concurrency:
       group: deploy-production
       cancel-in-progress: false
