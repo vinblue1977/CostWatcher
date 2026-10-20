@@ -9,6 +9,8 @@ import pytest
 from aws_cdk.assertions import Annotations, Match, Template
 from cdk_nag import AwsSolutionsChecks
 
+from infra.cur import COLUMNS, QUERY
+from infra.export_stack import CurExportStack
 from infra.stack import CostWatcherStack
 
 REPO = "test-owner@1/test-repo@2"
@@ -173,12 +175,107 @@ def test_api_lambda_can_only_read_the_table() -> None:
         if f["Properties"]["Handler"] == "api.handler.handler"
     )
     assert "TABLE_NAME" in api["Properties"]["Environment"]["Variables"]
-    policies = json.dumps(template.find_resources("AWS::IAM::Policy"))
+    policies = json.dumps({k: v for k, v in template.find_resources("AWS::IAM::Policy").items() if "ApiServiceRole" in k})
     assert "dynamodb:Query" in policies
     for broad in ("Scan", "GetItem", "BatchGetItem"):
         assert f"dynamodb:{broad}" not in policies
     for write in ("PutItem", "UpdateItem", "DeleteItem", "BatchWriteItem"):
         assert f"dynamodb:{write}" not in policies
+
+
+def test_only_the_ingest_lambda_writes_the_table() -> None:
+    template = _template()
+    writers = [k for k, v in template.find_resources("AWS::IAM::Policy").items() if "dynamodb:PutItem" in json.dumps(v)]
+    assert len(writers) == 1 and "IngestServiceRole" in writers[0]
+
+
+def test_export_bucket_is_private_kept_and_open_only_to_this_accounts_exports() -> None:
+    template = _template()
+    template.has_resource(
+        "AWS::S3::Bucket",
+        {
+            "DeletionPolicy": "Retain",
+            "Properties": Match.object_like(
+                {
+                    "BucketName": {"Fn::Join": ["", ["costwatcher-cur-", {"Ref": "AWS::AccountId"}]]},
+                    "PublicAccessBlockConfiguration": Match.object_like({"BlockPublicPolicy": True}),
+                }
+            ),
+        },
+    )
+    policies = json.dumps(template.find_resources("AWS::S3::BucketPolicy"))
+    for service in ("bcm-data-exports.amazonaws.com", "billingreports.amazonaws.com"):
+        assert service in policies
+    assert policies.count("aws:SourceAccount") >= 1 and "aws:SourceArn" in policies
+
+
+def test_athena_is_capped_and_encrypted_and_reads_partitions_by_projection() -> None:
+    template = _template()
+    template.has_resource_properties(
+        "AWS::Athena::WorkGroup",
+        {
+            "WorkGroupConfiguration": Match.object_like(
+                {
+                    "EnforceWorkGroupConfiguration": True,
+                    "BytesScannedCutoffPerQuery": 1_000_000_000,
+                    "ResultConfiguration": Match.object_like({"EncryptionConfiguration": {"EncryptionOption": "SSE_S3"}}),
+                }
+            )
+        },
+    )
+    template.has_resource_properties(
+        "AWS::Glue::Table",
+        {"TableInput": Match.object_like({"Parameters": Match.object_like({"projection.enabled": "true"})})},
+    )
+
+
+def test_ingest_runs_daily_and_failures_email_the_alert_topic() -> None:
+    template = _template()
+    template.has_resource_properties("AWS::Events::Rule", {"ScheduleExpression": "cron(30 8 * * ? *)"})
+    template.has_resource_properties(
+        "AWS::CloudWatch::Alarm", {"MetricName": "Errors", "Threshold": 1, "Namespace": "AWS/Lambda", "Period": 3600}
+    )
+
+
+def test_export_stack_is_in_us_east_1_and_delivers_parquet_to_the_main_bucket() -> None:
+    app = cdk.App(context=CDK_CONTEXT)
+    export = CurExportStack(
+        app, "Export", bucket_region="us-east-2", env=cdk.Environment(account="123456789012", region="us-east-1")
+    )
+    template = Template.from_stack(export)
+    template.has_resource_properties(
+        "AWS::BCMDataExports::Export",
+        {
+            "Export": Match.object_like(
+                {
+                    "DataQuery": Match.object_like(
+                        {
+                            "TableConfigurations": {
+                                "COST_AND_USAGE_REPORT": Match.object_like(
+                                    {"INCLUDE_RESOURCES": "TRUE", "TIME_GRANULARITY": "DAILY"}
+                                )
+                            }
+                        }
+                    ),
+                    "DestinationConfigurations": {
+                        "S3Destination": Match.object_like(
+                            {
+                                "S3Bucket": {"Fn::Join": ["", ["costwatcher-cur-", {"Ref": "AWS::AccountId"}]]},
+                                "S3Region": "us-east-2",
+                                "S3OutputConfigurations": Match.object_like(
+                                    {"Format": "PARQUET", "Overwrite": "OVERWRITE_REPORT"}
+                                ),
+                            }
+                        )
+                    },
+                }
+            )
+        },
+    )
+
+
+def test_export_columns_match_the_table() -> None:
+    assert QUERY.split(" FROM ")[0].removeprefix("SELECT ").split(", ") == [name for name, _ in COLUMNS]
 
 
 def test_lambdas_stay_outside_a_vpc() -> None:

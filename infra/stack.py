@@ -11,6 +11,7 @@ from aws_cdk import aws_sns_subscriptions as subs
 from cdk_nag import NagPackSuppression, NagSuppressions, RegexAppliesTo
 from constructs import Construct
 
+from infra.cur import Cur
 from infra.web import Web
 
 GITHUB = "token.actions.githubusercontent.com"
@@ -20,7 +21,7 @@ class CostWatcherStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        # Daily cost aggregates: PK COST#<YYYY-MM>, SK DAY#<date>. Empty until the ingest Lambda lands (phase 3).
+        # Daily cost aggregates: PK COST#<YYYY-MM>, SK DAY#<date>. Filled once a day by the ingest Lambda.
         self.table = dynamodb.TableV2(
             self,
             "Table",
@@ -36,6 +37,8 @@ class CostWatcherStack(Stack):
         topic = self._alert_topic()
         site_dir = self.node.try_get_context("siteDir") or "site"
         Web(self, "Web", site_dir=site_dir, topic=topic, table=self.table)  # pyright: ignore[reportArgumentType]
+        project_tag: str = self.node.try_get_context("projectTag") or "project"
+        Cur(self, "Cur", table=self.table, topic=topic, project_tag=project_tag)  # pyright: ignore[reportArgumentType]
         self._budget()
 
         github_repo: str = self.node.try_get_context("githubRepo") or ""
@@ -107,7 +110,11 @@ class CostWatcherStack(Stack):
         role.add_to_policy(
             iam.PolicyStatement(
                 actions=["sts:AssumeRole"],
-                resources=[f"arn:{self.partition}:iam::{self.account}:role/cdk-{qualifier}-*-{self.account}-{self.region}"],
+                # The export stack deploys to us-east-1, so its bootstrap roles are needed too.
+                resources=[
+                    f"arn:{self.partition}:iam::{self.account}:role/cdk-{qualifier}-*-{self.account}-{region}"
+                    for region in (self.region, "us-east-1")
+                ],
             )
         )
         self.table.grant(role, "dynamodb:DescribeTable")  # smoke test

@@ -23,4 +23,9 @@ Ideas and bugs found while building CostWatcher. The phased build plan is in [do
 - **Local site development needs `-c devOrigin=true`.** localhost:5173 is not allowed on the deployed pool or API by default.
 - **CodeQL has no JavaScript/TypeScript yet.** Default setup scans `actions` and `python` only, because the repo has no JS/TS source until the site ships; a push run on main failed on 2026-10-20 while it still listed JS/TS. Add `javascript-typescript` back when the React site lands.
 - **The deploy role is created by the stack.** The first deploy is a manual bootstrap and deploy (ask first), after which `AWS_DEPLOY_ROLE_ARN` and `DEPLOY_ENABLED` can be set.
-- **Data Exports must be created in us-east-1,** while the rest of the stack is in us-east-2.
+- **Data Exports must be created in us-east-1,** while the rest of the stack is in us-east-2. The `CostWatcherExport` stack needs us-east-1 bootstrapped too (ask first), and the deploy role already trusts its bootstrap roles.
+- **The CUR schema is unverified until the first export lands.** The Glue table columns (`infra/cur.py`) and the `BILLING_PERIOD=` folder layout follow the CUR 2.0 docs from memory; compare them with the first Parquet file. In particular check the timestamp type of `line_item_usage_start_date`.
+- **Cross-region delivery is untested.** The export (us-east-1) writes to a us-east-2 bucket; if the export fails to create, check the bucket policy's `aws:SourceArn` patterns first.
+- **Project attribution needs the tag activated.** Activate the `project` cost allocation tag in the Billing console (or pass `-c projectTag=<key>`); until then every cost is "unattributed". Tags apply going forward only.
+- **The ingest never deletes a day.** If AWS drops a day from a revised month, its old item stays in DynamoDB.
+- **The export is kept on stack delete.** The bucket has a retain policy because history can't be re-fetched; delete it by hand if the project is abandoned.
