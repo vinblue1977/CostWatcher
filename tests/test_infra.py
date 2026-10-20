@@ -164,7 +164,7 @@ def test_localhost_is_allowed_only_when_asked() -> None:
 def test_csp_allows_cognito_api_and_blocks_inline_styles() -> None:
     policies = _template().find_resources("AWS::CloudFront::ResponseHeadersPolicy")
     csp = json.dumps([p["Properties"] for p in policies.values()])
-    assert "cognito-idp.us-east-2.amazonaws.com" in csp and "style-src 'self';" in csp and "unsafe-inline" not in csp
+    assert csp.count("cognito-idp.us-east-2.amazonaws.com") == 1 and "style-src 'self';" in csp and "unsafe-inline" not in csp
 
 
 def test_api_lambda_can_only_read_the_table() -> None:
@@ -203,10 +203,21 @@ def test_export_bucket_is_private_kept_and_open_only_to_this_accounts_exports() 
             ),
         },
     )
-    policies = json.dumps(template.find_resources("AWS::S3::BucketPolicy"))
-    for service in ("bcm-data-exports.amazonaws.com", "billingreports.amazonaws.com"):
-        assert service in policies
-    assert policies.count("aws:SourceAccount") >= 1 and "aws:SourceArn" in policies
+    statements = [
+        s
+        for p in template.find_resources("AWS::S3::BucketPolicy").values()
+        for s in p["Properties"]["PolicyDocument"]["Statement"]
+    ]
+    # Only the billing export services may write, and only on behalf of this account's exports.
+    services = {"bcm-data-exports.amazonaws.com", "billingreports.amazonaws.com"}
+    delivery = next(s for s in statements if services & set(s.get("Principal", {}).get("Service", [])))
+    assert set(delivery["Principal"]["Service"]) == services
+    assert delivery["Condition"]["StringEquals"] == {"aws:SourceAccount": "123456789012"}
+    assert "aws:SourceArn" in delivery["Condition"]["ArnLike"]
+    # AWS's policy covers the whole bucket: the delivery statement's resources are the bucket and every object in it.
+    bucket, objects = delivery["Resource"]
+    assert bucket["Fn::GetAtt"][1] == "Arn"
+    assert objects["Fn::Join"][1] == [bucket, "/*"]
 
 
 def test_athena_is_capped_and_encrypted_and_reads_partitions_by_projection() -> None:
