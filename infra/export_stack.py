@@ -5,11 +5,13 @@ from aws_cdk import aws_bcmdataexports as bcm
 from constructs import Construct
 
 from infra.cur import EXPORT_NAME, EXPORT_PREFIX, QUERY, bucket_name
+from infra.tags import tag_project
 
 
 class CurExportStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, *, bucket_region: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
+        tag_project(self)
         bcm.CfnExport(
             self,
             "Export",

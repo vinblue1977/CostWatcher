@@ -12,6 +12,7 @@ from cdk_nag import NagPackSuppression, NagSuppressions, RegexAppliesTo
 from constructs import Construct
 
 from infra.cur import Cur
+from infra.tags import project_tag_key, tag_project
 from infra.web import Web
 
 GITHUB = "token.actions.githubusercontent.com"
@@ -38,7 +39,8 @@ class CostWatcherStack(Stack):
         site_dir = self.node.try_get_context("siteDir") or "site/dist"  # `make site` builds it
         budget_usd = float(self.node.try_get_context("monthlyBudgetUsd") or 5)
         Web(self, "Web", site_dir=site_dir, topic=topic, table=self.table, budget_usd=budget_usd)  # pyright: ignore[reportArgumentType]
-        project_tag: str = self.node.try_get_context("projectTag") or "project"
+        project_tag = project_tag_key(self)
+        tag_project(self)
         Cur(self, "Cur", table=self.table, topic=topic, project_tag=project_tag, budget_usd=budget_usd)  # pyright: ignore[reportArgumentType]
         self._budget(budget_usd)
 
