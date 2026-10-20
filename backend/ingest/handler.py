@@ -10,6 +10,7 @@ from typing import Any
 MONTH = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
 REVISION_DAYS = 5  # early in a month, the previous month is still being revised
 POLL_SECONDS = 2
+QUERY_SECONDS = 120  # two months of queries must fit in the Lambda's 5 minutes
 UNATTRIBUTED = "unattributed"
 
 
@@ -68,12 +69,16 @@ def _sql(month: str) -> str:
 def _query(athena: Any, sql: str) -> list[dict[str, str]]:
     """Runs one query in the cost-capped workgroup and returns its rows as dicts of strings."""
     run = athena.start_query_execution(QueryString=sql, WorkGroup=os.environ["ATHENA_WORKGROUP"])["QueryExecutionId"]
+    deadline = time.monotonic() + QUERY_SECONDS
     while True:
         status = athena.get_query_execution(QueryExecutionId=run)["QueryExecution"]["Status"]
         if status["State"] == "SUCCEEDED":
             break
         if status["State"] in ("FAILED", "CANCELLED"):
             raise RuntimeError(f"Athena query {status['State'].lower()}: {status.get('StateChangeReason', 'no reason given')}")
+        if time.monotonic() > deadline:
+            athena.stop_query_execution(QueryExecutionId=run)  # don't leave a billed query running past the Lambda
+            raise RuntimeError(f"Athena query still {status['State'].lower()} after {QUERY_SECONDS} seconds; cancelled")
         time.sleep(POLL_SECONDS)
     rows: list[dict[str, str]] = []
     header: list[str] = []
@@ -96,6 +101,8 @@ def _days(rows: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
     days: dict[str, dict[str, Any]] = {}
     for row in rows:
         cost = Decimal(row["cost"] or "0")
+        if not cost.is_finite():
+            raise ValueError(f"non-finite cost for {row['day']} {row['service']}: {row['cost']}")
         day = days.setdefault(row["day"], {"total": Decimal(0), "services": {}, "projects": {}, "usageTypes": {}})
         day["total"] += cost
         for group, key in (("services", "service"), ("projects", "project"), ("usageTypes", "usage_type")):

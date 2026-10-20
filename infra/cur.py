@@ -96,7 +96,7 @@ class Cur(Construct):
                     "projection.enabled": "true",
                     "projection.billing_period.type": "date",
                     "projection.billing_period.format": "yyyy-MM",
-                    "projection.billing_period.range": "2026-01,NOW",
+                    "projection.billing_period.range": "2025-01,NOW",
                     "projection.billing_period.interval": "1",
                     "projection.billing_period.interval.unit": "MONTHS",
                     "storage.location.template": f"{location}/BILLING_PERIOD=${{billing_period}}",
@@ -153,7 +153,12 @@ class Cur(Construct):
         bucket.grant_read_write(fn, "athena/*")
         fn.add_to_role_policy(
             iam.PolicyStatement(
-                actions=["athena:StartQueryExecution", "athena:GetQueryExecution", "athena:GetQueryResults"],
+                actions=[
+                    "athena:StartQueryExecution",
+                    "athena:StopQueryExecution",
+                    "athena:GetQueryExecution",
+                    "athena:GetQueryResults",
+                ],
                 resources=[f"arn:{stack.partition}:athena:{stack.region}:{stack.account}:workgroup/{WORKGROUP}"],
             )
         )

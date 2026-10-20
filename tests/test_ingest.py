@@ -97,6 +97,22 @@ def test_query_waits_reads_every_page_and_skips_the_header_once() -> None:
     assert athena.started == [{"QueryString": "SELECT 1", "WorkGroup": "wg"}]
 
 
+def test_stuck_query_is_cancelled_at_the_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
+    athena = FakeAthena("RUNNING", "RUNNING", pages=[])
+    stopped: list[dict[str, Any]] = []
+    athena.stop_query_execution = lambda **kwargs: stopped.append(kwargs)  # type: ignore[attr-defined]
+    monkeypatch.setattr(ingest, "POLL_SECONDS", 0)
+    monkeypatch.setattr(ingest, "QUERY_SECONDS", -1)
+    with pytest.raises(RuntimeError, match="cancelled"):
+        ingest._query(athena, "SELECT 1")
+    assert stopped == [{"QueryExecutionId": "q1"}]
+
+
+def test_non_finite_cost_is_rejected() -> None:
+    with pytest.raises(ValueError, match="non-finite"):
+        ingest._days([dict(zip(HEADER, ["2026-10-01", "AmazonS3", "Storage", "web", "NaN"], strict=True))])
+
+
 def test_failed_query_raises_with_the_reason() -> None:
     ingest.POLL_SECONDS = 0
     with pytest.raises(RuntimeError, match="failed: boom"):
