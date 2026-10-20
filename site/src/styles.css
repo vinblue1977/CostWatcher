@@ -29,15 +29,15 @@ button { cursor: pointer; }
 h1, h2, p { margin: 0; }
 h2 { font-size: 16px; font-weight: 600; }
 
-.status { padding: 48px 32px; color: var(--muted); }
-.gate { max-width: 420px; margin: 20vh auto 0; padding: 0 24px; display: flex; flex-direction: column; gap: 16px; align-items: flex-start; }
+.status { padding: calc(48px + env(safe-area-inset-top)) 32px 48px; color: var(--muted); }
+.gate { max-width: 420px; margin: calc(20vh + env(safe-area-inset-top)) auto 0; padding: 0 24px; display: flex; flex-direction: column; gap: 16px; align-items: flex-start; }
 .gate h1 { font-size: 28px; letter-spacing: -0.02em; }
 .gate p { color: var(--muted); line-height: 1.5; }
 .primary { min-height: 44px; padding: 0 22px; border: 0; border-radius: 10px; background: var(--accent); color: #0d1117; font-weight: 600; }
 .quiet { min-height: 44px; padding: 0 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); font-size: 13px; font-weight: 500; }
 
 .shell { display: flex; flex-direction: column; min-height: 100vh; }
-.top { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 32px; padding: 16px 32px; border-bottom: 1px solid var(--line); }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 32px; padding: calc(16px + env(safe-area-inset-top)) 32px 16px; border-bottom: 1px solid var(--line); }
 .brand { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
 .nav { display: flex; gap: 4px; flex-grow: 1; }
 .nav a { padding: 10px 14px; border-radius: 8px; font-size: 14px; font-weight: 500; }

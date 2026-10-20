@@ -285,4 +285,6 @@ jobs:
             echo "$2 -> $code (want $1)"; [ "$code" = "$1" ]
           }
           check 200 "$site/"
+          # CloudFront answers a missing file with index.html (200), so check the manifest is really JSON.
+          curl -sf --max-time 20 --retry 3 --retry-all-errors "$site/manifest.json" | jq -e '.name == "CostWatcher"' >/dev/null
           check 401 "$api/costs/2026-10"  # sign-in required
