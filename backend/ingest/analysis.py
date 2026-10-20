@@ -28,10 +28,9 @@ def forecast(days: dict[str, Day], month: str) -> dict[str, Decimal] | None:
     """
     if not days:
         return None
-    elapsed = int(max(days)[8:])  # the last day with data; there is no same-day figure
     spent = sum((d["total"] for d in days.values()), Decimal(0))
-    left = calendar.monthrange(int(month[:4]), int(month[5:]))[1] - elapsed
-    projected = spent + spent / elapsed * left
+    left = calendar.monthrange(int(month[:4]), int(month[5:]))[1] - int(max(days)[8:])
+    projected = spent + spent / len(days) * left  # the average of the days we have, so a mid-month start isn't diluted
     spread = Decimal(0)
     if len(days) >= TRAILING_DAYS:
         # Days vary independently, so the spread over the days left grows with their square root.
@@ -65,8 +64,10 @@ def alerts(days: dict[str, Day], budget: Decimal) -> list[Alert]:
     latest = max(days)
     found: list[Alert] = []
     month = latest[:7]
-    projection = forecast({d: v for d, v in days.items() if d.startswith(month)}, month)
-    if projection and projection["projected"] > budget:
+    month_days = {d: v for d, v in days.items() if d.startswith(month)}
+    projection = forecast(month_days, month)
+    # A day or two of data extrapolates wildly, and the alert is sent only once a month.
+    if projection and projection["projected"] > budget and len(month_days) >= TRAILING_DAYS:
         found.append(
             Alert(
                 f"budget#{month}",

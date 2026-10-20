@@ -53,11 +53,17 @@ def _months(event: dict[str, Any], today: dt.date) -> list[str]:
 
 def _notify(days: dict[str, dict[str, Any]], today: dt.date, dynamodb: Any) -> list[str]:
     """Emails each new alert once. A marker item per alert key stops tomorrow's run from repeating it."""
-    if not days or (today - dt.date.fromisoformat(max(days))).days > ALERT_FRESH_DAYS:
+    if not days:
         return []
-    month, sent = max(days)[:7], []
+    if (today - dt.date.fromisoformat(max(days))).days > ALERT_FRESH_DAYS:
+        print(f"No alerts: the newest cost day is {max(days)}, so the export looks stale")
+        return []
+    month, sent = max(days)[:7], []  # a first-time service alerts once ever, so its marker is not per month
     for alert in analysis.alerts(days, Decimal(os.environ["BUDGET_USD"])):
-        marker = {"PK": {"S": f"ALERT#{month}"}, "SK": {"S": alert.key}}
+        marker = {
+            "PK": {"S": "ALERT#global" if alert.key.startswith("new-service#") else f"ALERT#{month}"},
+            "SK": {"S": alert.key},
+        }
         try:
             dynamodb.put_item(TableName=os.environ["TABLE_NAME"], Item=marker, ConditionExpression="attribute_not_exists(SK)")
         except Exception as error:

@@ -88,3 +88,7 @@ def test_budget_alert_fires_when_the_projection_passes_it() -> None:
     alert = analysis.alerts(week("1"), D(20))[0]  # $1 a day is $31 for the month
     assert alert.key == "budget#2026-10" and "$31.00" in alert.message
     assert analysis.alerts(week("1"), D(31)) == []
+
+
+def test_budget_alert_waits_for_a_week_of_data() -> None:
+    assert analysis.alerts({"2026-10-02": day("50")}, D(5)) == []
