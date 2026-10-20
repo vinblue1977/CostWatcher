@@ -259,4 +259,4 @@ jobs:
             echo "$2 -> $code (want $1)"; [ "$code" = "$1" ]
           }
           check 200 "$site/"
-          check 401 "$api/devices"  # sign-in required
+          check 401 "$api/costs/2026-10"  # sign-in required
