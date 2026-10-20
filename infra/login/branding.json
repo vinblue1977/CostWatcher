@@ -384,8 +384,7 @@
     },
     "disabled": {
      "backgroundColor": "1b2330ff",
-     "borderColor": "2a3441ff",
-     "textColor": "8b96a3ff"
+     "borderColor": "2a3441ff"
     },
     "hover": {
      "backgroundColor": "b3ceffff",
