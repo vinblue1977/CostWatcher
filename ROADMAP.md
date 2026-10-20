@@ -27,12 +27,15 @@ Ideas and bugs found while building CostWatcher. The phased build plan is in [do
 
 - **Cost data is global, not per user.** Any signed-in user reads all of it; safe only while sign-up stays closed.
 - **`GET /costs/{month}` is unbounded.** It returns every item under the month's key; paginate or summarize if per-resource items share it.
-- **An empty month looks like zero cost.** The dashboard should show "no data yet", not $0, when `days` is empty.
+- **The dashboard is untested against real data.** It was built from the approved mockups and unit-tested on the data model only; no browser check ran with real billing data (none had arrived). Look at all three pages once the first ingest has run.
+- **The Breakdown page differs from the mockup.** The treemap and "which resource drove each service" table need per-resource data the daily item doesn't hold, so Breakdown shows ranked bars by project, service and usage type. The mockup's "CostWatcher's own cost" card is replaced by an average-day card until that cost can be told apart.
+- **CodeQL has no JavaScript/TypeScript yet.** Default setup scans `actions` and `python` only (a push run on main failed on 2026-10-20 while it listed JS/TS and the repo had none). The site now exists, so add `javascript-typescript` to the default setup languages (repo settings, or `gh api -X PATCH repos/vinblue1977/CostWatcher/code-scanning/default-setup`).
+- **The dashboard forecast trusts the newest month.** If ingest stalls across a month boundary, "Month to date" shows the last month with data under its own dates, and missing days within a month are averaged over the days present.
+- **Tokens live in localStorage.** Refresh tokens last 30 days so the phone stays signed in; the CSP (`script-src 'self'`) is what protects them. Revisit if the CSP ever loosens.
 - **SPA fallback hides missing files.** CloudFront turns every S3 403/404 into a 200 `index.html`, so a missing `config.json` or hashed asset returns HTML. Scope the fallback to extensionless paths with a CloudFront Function when the real site ships.
 - **Alerts vanish if `alertEmail` is omitted.** The budget and email subscription only exist when `-c alertEmail=...` is passed, so a local `cdk deploy` without it removes them. CI always passes it; always pass it locally too.
 - **The API Lambda has read-only table access.** The ingest Lambda (phase 3) needs its own write grant; keep the two roles separate.
 - **Local site development needs `-c devOrigin=true`.** localhost:5173 is not allowed on the deployed pool or API by default.
-- **CodeQL has no JavaScript/TypeScript yet.** Default setup scans `actions` and `python` only, because the repo has no JS/TS source until the site ships; a push run on main failed on 2026-10-20 while it still listed JS/TS. Add `javascript-typescript` back when the React site lands.
 - **The deploy role is created by the stack.** The first deploy is a manual bootstrap and deploy (ask first), after which `AWS_DEPLOY_ROLE_ARN` and `DEPLOY_ENABLED` can be set.
 - **Data Exports must be created in us-east-1,** while the rest of the stack is in us-east-2. The `CostWatcherExport` stack needs us-east-1 bootstrapped too (ask first), and the deploy role already trusts its bootstrap roles.
 - **The CUR schema is unverified until the first export lands.** The Glue table columns (`infra/cur.py`) and the `BILLING_PERIOD=` folder layout follow the CUR 2.0 docs from memory; compare them with the first Parquet file. In particular check the timestamp type of `line_item_usage_start_date`.

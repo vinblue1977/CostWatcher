@@ -1,9 +1,9 @@
 PYTHON ?= .venv/bin/python
-SITE_DIR ?= site
+SITE_DIR ?= site/dist
 # The CDK CLI pinned in package-lock.json (`make install` runs npm ci).
 CDK ?= npx --no-install cdk
 
-.PHONY: install check lint test audit lock synth diff clean
+.PHONY: install check lint test audit lock synth diff clean site
 
 install:            ## Create the virtualenv and install everything (uv if installed, else pip)
 	if command -v uv >/dev/null; then \
@@ -12,10 +12,16 @@ install:            ## Create the virtualenv and install everything (uv if insta
 		python3.14 -m venv .venv && $(PYTHON) -m pip install --upgrade pip && $(PYTHON) -m pip install --require-hashes -r requirements-dev.txt && $(PYTHON) -m pip check; \
 	fi
 	npm ci --ignore-scripts --no-audit --no-fund  # the CDK CLI and pyright
+	npm ci --prefix site --ignore-scripts --no-audit --no-fund  # the dashboard's toolchain
 
 check:              ## Everything CI checks, locally (synth uses a stand-in site, like CI)
-	$(MAKE) lint test audit
+	$(MAKE) lint test audit site
 	$(MAKE) synth SITE_DIR=tests/fixtures/site
+
+site:               ## Dashboard: typecheck, unit tests, production build into site/dist
+	npm run --prefix site typecheck
+	npm run --prefix site test
+	npm run --prefix site build
 
 lint:               ## Python: ruff (with Bandit security rules) and pyright types
 	$(PYTHON) -m ruff check .

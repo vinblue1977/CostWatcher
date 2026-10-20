@@ -35,6 +35,7 @@ class Web(Construct):
         site_dir: str,
         topic: sns.ITopic,
         table: dynamodb.ITable,
+        budget_usd: float,
     ) -> None:
         super().__init__(scope, construct_id)
         region = Stack.of(self).region
@@ -232,7 +233,13 @@ class Web(Construct):
                 s3deploy.Source.asset(site_dir),
                 s3deploy.Source.json_data(
                     "config.json",
-                    {"apiUrl": api_url, "authUrl": auth_url, "clientId": client.user_pool_client_id, "region": region},
+                    {
+                        "apiUrl": api_url,
+                        "authUrl": auth_url,
+                        "clientId": client.user_pool_client_id,
+                        "region": region,
+                        "budgetUsd": budget_usd,
+                    },
                 ),
             ],
             distribution=distribution,
