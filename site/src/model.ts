@@ -13,6 +13,7 @@ export type Range = "7d" | "14d" | "30d" | "MTD";
 export const RANGES: Range[] = ["7d", "14d", "30d", "MTD"];
 const RANGE_DAYS: Record<string, number> = { "7d": 7, "14d": 14, "30d": 30 };
 export const TRAILING_DAYS = 7;
+const MIN_PRIOR_DAYS = 5; // of the 7 before the last week; fewer would make every change look huge
 const SPIKE_FACTOR = 2;
 const SPIKE_MIN = 0.5;
 export const OTHER = "Other";
@@ -59,7 +60,7 @@ export function stack(days: Day[], group: Group, top = 5): Stack {
     .filter(([, cost]) => cost > 0)
     .slice(0, top)
     .map(([name]) => name);
-  const rest = days.some((d) => Object.keys(d[group]).some((k) => !names.includes(k)));
+  const rest = days.some((d) => Object.entries(d[group]).some(([k, cost]) => cost > 0 && !names.includes(k)));
   const all = rest ? [...names, OTHER] : names;
   const rows = days.map((day) => {
     const parts = all.map(() => 0);
@@ -71,6 +72,19 @@ export function stack(days: Day[], group: Group, top = 5): Stack {
     return { date: day.date, total: day.total, parts };
   });
   return { names: all, rows };
+}
+
+/** Cost of the last 7 days, of the 7 before, and the change between them (null with too few earlier days). */
+export function weekOverWeek(days: Day[]): { recent: number; prior: number; pct: number | null } {
+  const latest = sortDays(days).at(-1);
+  if (!latest) return { recent: 0, prior: 0, pct: null };
+  const split = shiftDate(latest.date, 1 - TRAILING_DAYS);
+  const before = shiftDate(split, -TRAILING_DAYS);
+  const sum = (list: Day[]) => list.reduce((total, d) => total + d.total, 0);
+  const prior = days.filter((d) => d.date >= before && d.date < split);
+  const recent = sum(days.filter((d) => d.date >= split));
+  const was = sum(prior);
+  return { recent, prior: was, pct: prior.length >= MIN_PRIOR_DAYS && was > 0 ? ((recent - was) / was) * 100 : null };
 }
 
 export interface Mover {
@@ -94,7 +108,7 @@ export function movers(days: Day[], group: Group = "services", limit = 5): Mover
     sorted.filter((d) => d.date >= before && d.date < split),
     group,
   );
-  if (!sorted.some((d) => d.date < split)) return null;
+  if (sorted.filter((d) => d.date >= before && d.date < split).length < MIN_PRIOR_DAYS) return null;
   const keys = new Set([...Object.keys(recent), ...Object.keys(prior)]);
   return [...keys]
     .map((name) => {

@@ -1,5 +1,5 @@
 PYTHON ?= .venv/bin/python
-SITE_DIR ?= site
+SITE_DIR ?= site/dist
 # The CDK CLI pinned in package-lock.json (`make install` runs npm ci).
 CDK ?= npx --no-install cdk
 

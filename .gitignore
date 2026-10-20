@@ -14,7 +14,8 @@ cdk.context.json
 # Frontend
 node_modules/
 site/dist/
-site/public/config.json  # a copy of the deployed config for local development
+# A copy of the deployed config for local development
+site/public/config.json
 
 # Secrets and local config: vendor tokens never go in this public repo
 .env

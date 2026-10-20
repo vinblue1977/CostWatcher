@@ -98,7 +98,7 @@ async function tokenRequest(config: Config, body: Record<string, string>): Promi
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ client_id: config.clientId, ...body }),
   });
-  if (!response.ok) throw new Error(`sign-in failed (${response.status})`);
+  if (!response.ok) throw new Error("sign-in did not complete; please try again");
   const json = (await response.json()) as { access_token: string; refresh_token?: string; expires_in: number };
   return {
     accessToken: json.access_token,
@@ -107,12 +107,20 @@ async function tokenRequest(config: Config, body: Record<string, string>): Promi
   };
 }
 
+function savedPkce(): { verifier: string; state: string } | null {
+  try {
+    return JSON.parse(read(sessionStorage, PKCE) ?? "null") as { verifier: string; state: string } | null;
+  } catch {
+    return null; // a corrupt value is treated as a missing verifier
+  }
+}
+
 /** Finishes a sign-in when the page was opened by the hosted UI's redirect (?code=...&state=...). */
 export async function handleRedirect(config: Config): Promise<void> {
   const params = new URLSearchParams(window.location.search);
   const code = params.get("code");
   if (!code && !params.has("error")) return;
-  const saved = JSON.parse(read(sessionStorage, PKCE) ?? "null") as { verifier: string; state: string } | null;
+  const saved = savedPkce();
   write(sessionStorage, PKCE, null);
   window.history.replaceState(null, "", window.location.pathname + window.location.hash);
   if (!code || !saved || params.get("state") !== saved.state) throw new Error("sign-in was not completed; try again");

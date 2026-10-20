@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { baseline, drivers, forecast, friendly, inRange, isSpike, latestSpike, money, movers, shiftDate, stack } from "./model";
+import { baseline, drivers, forecast, friendly, inRange, isSpike, latestSpike, money, movers, shiftDate, stack, weekOverWeek } from "./model";
 import type { Day } from "./model";
 
 function day(date: string, total: number, services: Record<string, number> = { S3: total }, usageTypes: Record<string, number> = {}): Day {
@@ -83,5 +83,16 @@ describe("formatting", () => {
   it("formats money with the sign in front", () => {
     expect(money(1234.5)).toBe("$1,234.50");
     expect(money(-0.5)).toBe("-$0.50");
+  });
+});
+
+describe("week over week", () => {
+  it("compares the last 7 days with the 7 before and waits for enough earlier days", () => {
+    expect(weekOverWeek(steady(10)).pct).toBeNull(); // 3 earlier days
+    const days = [...steady(7, 1, "2026-10-01"), ...steady(7, 2, "2026-10-08")];
+    expect(weekOverWeek(days)).toMatchObject({ recent: 14, prior: 7, pct: 100 });
+  });
+  it("shows no movers on a thin earlier week", () => {
+    expect(movers(steady(9))).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Legend, StackedBars } from "../charts";
-import { baseline, drivers, forecast, friendly, inRange, latestSpike, money, movers, shortDate, signedMoney, stack, sumGroup } from "../model";
+import { baseline, drivers, forecast, friendly, inRange, latestSpike, money, movers, shortDate, signedMoney, stack, sumGroup, weekOverWeek } from "../model";
 import type { Baseline, Day, Group, Range } from "../model";
 import { Empty, Note } from "./parts";
 
@@ -21,11 +21,7 @@ export function Overview({ days, range, budget }: { days: Day[]; range: Range; b
   if (days.length === 0) return <Empty />;
 
   const latest = days.at(-1);
-  const week = days.filter((d) => latest && d.date > shiftBack(latest.date, 7));
-  const weekCost = week.reduce((sum, d) => sum + d.total, 0);
-  const before = days.filter((d) => latest && d.date <= shiftBack(latest.date, 7) && d.date > shiftBack(latest.date, 14));
-  const beforeCost = before.reduce((sum, d) => sum + d.total, 0);
-  const change = before.length === 7 && beforeCost > 0 ? ((weekCost - beforeCost) / beforeCost) * 100 : null;
+  const { recent: weekCost, pct: change } = weekOverWeek(days);
   const average = shown.length ? shown.reduce((sum, d) => sum + d.total, 0) / shown.length : 0;
   const worst = spike && drivers(spike.day.services, spike.base.services, 1)[0];
 
@@ -142,12 +138,6 @@ export function Overview({ days, range, budget }: { days: Day[]; range: Range; b
       </Note>
     </>
   );
-}
-
-function shiftBack(date: string, days: number): string {
-  const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() - days);
-  return d.toISOString().slice(0, 10);
 }
 
 function ForecastBar({ spent, projected, budget }: { spent: number; projected: number; budget?: number | undefined }) {

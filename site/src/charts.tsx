@@ -7,7 +7,7 @@ const GREY = "#7C8797";
 /** The same name gets the same color on every chart: by its place in the list, grey for Other/unattributed. */
 export function color(names: string[], name: string): string {
   if (name === OTHER || name === UNATTRIBUTED) return GREY;
-  return PALETTE[names.filter((n) => n !== OTHER && n !== UNATTRIBUTED).indexOf(name) % PALETTE.length] ?? GREY;
+  return PALETTE[names.filter((n) => n !== OTHER && n !== UNATTRIBUTED).indexOf(name)] ?? GREY; // grey past the fifth, never a repeat
 }
 
 export function Legend({ names }: { names: string[] }) {

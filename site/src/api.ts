@@ -25,6 +25,13 @@ export async function loadDays(config: Config, now = new Date()): Promise<Day[] 
   if (!token) return null;
   const current = now.toISOString().slice(0, 7);
   const previous = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)).toISOString().slice(0, 7);
-  const [before, after] = await Promise.all([month(config, token, previous), month(config, token, current)]);
+  // The previous month only widens the 30-day range and the weekly comparison, so its failure is not fatal.
+  const [before, after] = await Promise.all([
+    month(config, token, previous).catch((error: unknown) => {
+      if (error instanceof SignedOut) throw error;
+      return [] as Day[];
+    }),
+    month(config, token, current),
+  ]);
   return [...before, ...after];
 }
