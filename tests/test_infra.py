@@ -207,7 +207,16 @@ def test_export_bucket_is_private_kept_and_open_only_to_this_accounts_exports() 
     for service in ("bcm-data-exports.amazonaws.com", "billingreports.amazonaws.com"):
         assert service in policies
     assert policies.count("aws:SourceAccount") >= 1 and "aws:SourceArn" in policies
-    assert "/*" in policies and "/cur/*" not in policies  # AWS's policy covers the whole bucket
+    # AWS's policy covers the whole bucket: the delivery statement's resources are the bucket and every object in it.
+    delivery = next(
+        s
+        for p in template.find_resources("AWS::S3::BucketPolicy").values()
+        for s in p["Properties"]["PolicyDocument"]["Statement"]
+        if "bcm-data-exports.amazonaws.com" in s.get("Principal", {}).get("Service", [])
+    )
+    bucket, objects = delivery["Resource"]
+    assert bucket["Fn::GetAtt"][1] == "Arn"
+    assert objects["Fn::Join"][1] == [bucket, "/*"]
 
 
 def test_athena_is_capped_and_encrypted_and_reads_partitions_by_projection() -> None:
