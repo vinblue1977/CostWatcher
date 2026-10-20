@@ -76,7 +76,7 @@ export function App() {
   return <Shell state={state} path={path} range={range} setRange={setRange} />;
 }
 
-function Shell({ state, path, range, setRange }: { state: Extract<State, { kind: "ready" }>; path: string; range: Range; setRange: (r: Range) => void }) {
+export function Shell({ state, path, range, setRange }: { state: Extract<State, { kind: "ready" }>; path: string; range: Range; setRange: (r: Range) => void }) {
   const page = path === "/breakdown" ? "/breakdown" : path === "/spikes" ? "/spikes" : "/";
   const body = useMemo(() => {
     if (page === "/breakdown") return <Breakdown days={state.days} range={range} />;
