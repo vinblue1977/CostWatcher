@@ -38,19 +38,19 @@ class CostWatcherStack(Stack):
         site_dir = self.node.try_get_context("siteDir") or "site"
         Web(self, "Web", site_dir=site_dir, topic=topic, table=self.table)  # pyright: ignore[reportArgumentType]
         project_tag: str = self.node.try_get_context("projectTag") or "project"
-        Cur(self, "Cur", table=self.table, topic=topic, project_tag=project_tag)  # pyright: ignore[reportArgumentType]
-        self._budget()
+        budget_usd = float(self.node.try_get_context("monthlyBudgetUsd") or 5)
+        Cur(self, "Cur", table=self.table, topic=topic, project_tag=project_tag, budget_usd=budget_usd)  # pyright: ignore[reportArgumentType]
+        self._budget(budget_usd)
 
         github_repo: str = self.node.try_get_context("githubRepo") or ""
         if github_repo:
             self._github_deploy_role(github_repo)
 
-    def _budget(self) -> None:
+    def _budget(self, limit: float) -> None:
         """Emails the alert address at 80% of the monthly limit (actual) and 100% (forecast). Two budgets are free."""
         alert_email: str = self.node.try_get_context("alertEmail") or ""
         if not alert_email:
             return
-        limit = float(self.node.try_get_context("monthlyBudgetUsd") or 5)
 
         def notify(threshold: int, kind: str) -> budgets.CfnBudget.NotificationWithSubscribersProperty:
             return budgets.CfnBudget.NotificationWithSubscribersProperty(

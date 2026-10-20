@@ -12,7 +12,18 @@ Ideas and bugs found while building CostWatcher. The phased build plan is in [do
 - **Weekly email digest.** Top movers and the forecast, through SNS or SES.
 - **Custom domain.** Optional later; the CloudFront URL is fine for personal use.
 
+- **Unit costs.** Cost per 1,000 Lambda invocations or per GB stored needs usage quantities; add `line_item_usage_amount` to the export columns and the ingest query first.
+- **Waste finder.** Idle NAT gateways, unattached EBS volumes, old snapshots and log groups without retention need a resource inventory (EC2, CloudWatch Logs APIs or AWS Config), which the export alone can't give.
+- **Per-resource detail.** The treemap needs cost per resource, which the daily item doesn't hold yet; it would need its own items to stay under the 400 KB item limit.
+
 ## Bugs and risks
+
+- **Alert thresholds are constants.** Spike (2x the 7-day average and over $0.50), service rise (1.5x and over $1) and the new-service rule live in `backend/ingest/analysis.py`; tune them after a few weeks of real data. Every rule stays silent until 7 days of history exist.
+- **A "new service" alert fires once per service, ever.** Its marker item is never cleared, so a service that goes quiet and returns won't alert again.
+- **The alert baseline is thin early in a month.** It uses the last 7 days read in that run (this month only after day 5), not 7 calendar days, so rules are quiet for about the first week of a month and gaps in the export stretch the window. Reading the stored previous month would fix it.
+- **Alerts use the latest day, which may be partial.** Each is sent once per date with that day's figure at 08:30 UTC; later revisions aren't reported. A crash between writing the marker and publishing loses that alert, and one failed publish skips the rest of that run's alerts.
+- **Alert markers are never deleted.** One tiny `ALERT#<month>` item per alert sent; negligible, but they accumulate.
+- **The budget alert duplicates AWS Budgets.** Both warn when the month is forecast to pass the limit; CostWatcher's version also names the range.
 
 - **Cost data is global, not per user.** Any signed-in user reads all of it; safe only while sign-up stays closed.
 - **`GET /costs/{month}` is unbounded.** It returns every item under the month's key; paginate or summarize if per-resource items share it.
