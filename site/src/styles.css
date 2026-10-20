@@ -45,6 +45,7 @@ h2 { font-size: 16px; font-weight: 600; }
 .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .nav svg, .range-select, .phone-only { display: none; }
+.range-select { position: relative; }
 .range-select select { min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); font-size: 16px; font-weight: 500; }
 .segmented { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
 .segmented button { min-height: 36px; padding: 0 14px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 13px; font-weight: 500; }
@@ -124,8 +125,8 @@ td { padding: 11px 12px 11px 0; border-top: 1px solid var(--line); overflow-wrap
 td.num { font-weight: 600; }
 
 @media (max-width: 640px) {
-  .top { padding: calc(12px + env(safe-area-inset-top)) 16px 12px; gap: 12px; justify-content: space-between; flex-wrap: nowrap; }
-  .brand { font-size: 17px; }
+  .top { padding: calc(12px + env(safe-area-inset-top)) 16px 12px; gap: 12px; justify-content: space-between; }
+  .brand { font-size: 17px; min-width: 0; }
   .segmented, .desktop-only { display: none; }
   .range-select, .phone-only { display: block; }
   .phone-only { align-self: flex-start; }

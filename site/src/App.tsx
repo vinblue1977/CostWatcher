@@ -116,7 +116,7 @@ export function Shell({ state, path, range, setRange }: { state: Extract<State, 
               </div>
               <label className="range-select">
                 <span className="sr">Date range</span>
-                <select value={range} onChange={(e) => setRange(e.target.value as Range)}>
+                <select value={range} onChange={(e) => setRange(RANGES.find((r) => r === e.target.value) ?? range)}>
                   {RANGES.map((r) => (
                     <option key={r} value={r}>
                       {r}
