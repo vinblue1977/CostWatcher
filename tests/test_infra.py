@@ -2,6 +2,8 @@
 
 import functools
 import json
+import shutil
+import subprocess
 from pathlib import Path
 
 import aws_cdk as cdk
@@ -12,6 +14,7 @@ from cdk_nag import AwsSolutionsChecks
 from infra.cur import COLUMNS, QUERY
 from infra.export_stack import CurExportStack
 from infra.stack import CostWatcherStack
+from infra.web import SPA_FALLBACK
 
 REPO = "test-owner@1/test-repo@2"
 # The same feature flags as a real synth, so tests render the template the way a deploy does.
@@ -146,6 +149,22 @@ def test_api_routes_require_sign_in_and_site_is_private() -> None:
         "AWS::CloudFront::Distribution",
         Match.object_like({"DistributionConfig": Match.object_like({"DefaultRootObject": "index.html"})}),
     )
+
+
+def test_only_extensionless_paths_fall_back_to_the_app() -> None:
+    template = _template()
+    config = next(iter(template.find_resources("AWS::CloudFront::Distribution").values()))["Properties"]["DistributionConfig"]
+    assert "CustomErrorResponses" not in config  # a missing file must stay a 403/404, not a 200 index.html
+    template.has_resource_properties("AWS::CloudFront::Function", {"FunctionCode": SPA_FALLBACK})
+    assert config["DefaultCacheBehavior"]["FunctionAssociations"][0]["EventType"] == "viewer-request"
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node runs the CloudFront Function")
+def test_fallback_function_rewrites_by_extension() -> None:
+    script = SPA_FALLBACK + "for (const u of process.argv.slice(1)) console.log(handler({request: {uri: u}}).uri);"
+    uris = ["/", "/overview", "/config.json", "/assets/index-abc123.js", "/assets/v1.2/app", "/favicon.ico"]
+    out = subprocess.run(["node", "-e", script, "--", *uris], capture_output=True, text=True, check=True).stdout  # noqa: S603, S607
+    assert out.split() == ["/index.html", "/index.html", "/config.json", "/assets/index-abc123.js", "/index.html", "/favicon.ico"]
 
 
 def test_localhost_is_allowed_only_when_asked() -> None:

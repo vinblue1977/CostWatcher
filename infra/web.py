@@ -23,6 +23,16 @@ from constructs import Construct
 
 DEV_ORIGIN = "http://localhost:5173"  # only allowed when the stack is synthesized with -c devOrigin=true
 
+SPA_FALLBACK = """\
+function handler(event) {
+  var request = event.request;
+  if (!/\\.[^/]+$/.test(request.uri)) {
+    request.uri = "/index.html";
+  }
+  return request;
+}
+"""
+
 ROUTES = ((apigw.HttpMethod.GET, "/costs/{month}"),)
 
 
@@ -90,6 +100,14 @@ class Web(Construct):
                 ]
             ),
         )
+        # The app routes in the browser: extensionless paths load the app. A missing file (config.json, a hashed
+        # asset) keeps its real 403/404 instead of turning into a 200 index.html.
+        fallback = cloudfront.Function(
+            self,
+            "SpaFallback",
+            runtime=cloudfront.FunctionRuntime.JS_2_0,
+            code=cloudfront.FunctionCode.from_inline(SPA_FALLBACK),
+        )
         distribution = cloudfront.Distribution(
             self,
             "Site",
@@ -97,13 +115,11 @@ class Web(Construct):
                 origin=origins.S3BucketOrigin.with_origin_access_control(bucket),  # pyright: ignore[reportArgumentType]
                 viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
                 response_headers_policy=headers,
+                function_associations=[
+                    cloudfront.FunctionAssociation(function=fallback, event_type=cloudfront.FunctionEventType.VIEWER_REQUEST)
+                ],
             ),
             default_root_object="index.html",
-            # The app routes in the browser: unknown paths load the app.
-            error_responses=[
-                cloudfront.ErrorResponse(http_status=code, response_http_status=200, response_page_path="/index.html")
-                for code in (403, 404)
-            ],
             price_class=cloudfront.PriceClass.PRICE_CLASS_100,
         )
         site_url = f"https://{distribution.distribution_domain_name}"
