@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { baseline, drivers, forecast, friendly, inRange, isSpike, latestSpike, money, monthName, movers, previousMonth, shiftDate, stack, tagCoverage, weekOverWeek } from "./model";
+import { baseline, drivers, forecast, friendly, inRange, isSpike, latestSpike, money, monthName, movers, previousMonth, shiftDate, shortResource, stack, tagCoverage, weekOverWeek } from "./model";
 import type { Day } from "./model";
 
 function day(date: string, total: number, services: Record<string, number> = { S3: total }, usageTypes: Record<string, number> = {}): Day {
@@ -119,5 +119,21 @@ describe("months", () => {
     expect(previousMonth("2026-10")).toBe("2026-09");
     expect(previousMonth("2027-01")).toBe("2026-12");
     expect(monthName("2026-10")).toBe("October 2026");
+  });
+});
+
+describe("shortResource", () => {
+  it("drops the partition, service, region and account from an ARN", () => {
+    expect(shortResource("arn:aws:dynamodb:us-east-2:235316001927:table/Orders")).toBe("table/Orders");
+    expect(shortResource("arn:aws:bedrock:us-east-2:235316001927:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0")).toBe("inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0");
+    expect(shortResource("arn:aws:secretsmanager:us-east-2:235316001927:secret:google/secrets-CX4YJR")).toBe("secret:google/secrets-CX4YJR");
+  });
+  it("leaves other IDs alone and labels a missing one", () => {
+    expect(shortResource("cdk-hnb659fds-assets-235316001927-us-east-2")).toBe("cdk-hnb659fds-assets-235316001927-us-east-2");
+    expect(shortResource("arn:aws:s3:::my-bucket")).toBe("my-bucket"); // S3 ARNs have no region or account
+    expect(shortResource("arn:aws:s3:::")).toBe("arn:aws:s3:::"); // nothing after the account part: keep it whole
+    expect(shortResource("arn:aws:iam")).toBe("arn:aws:iam");
+    expect(shortResource("")).toBe("(no resource ID)");
+    expect(shortResource("(no resource ID)")).toBe("(no resource ID)");
   });
 });
