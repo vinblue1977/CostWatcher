@@ -398,3 +398,46 @@ def test_known_marketplace_product_codes_are_named() -> None:
 def test_names_with_quotes_are_escaped_in_the_service_expression(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ingest, "PRODUCT_NAMES", {"x'y": "Sonnet's"})
     assert "WHEN 'x''y' THEN 'Sonnet''s'" in ingest._service_sql()
+
+
+def test_api_stage_rows_get_the_project_tag_of_their_api(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AWS_REGION", "us-east-2")
+    monkeypatch.setenv("PROJECT_TAG", "project")
+
+    class Tagging:
+        def get_resources(self, **kwargs: Any) -> dict[str, Any]:
+            assert kwargs["ResourceARNList"] == ["arn:aws:apigateway:us-east-2::/apis/4u2uhqbi7e"]
+            tags = [{"Key": "Project", "Value": "portfolio-tracker"}]
+            return {"ResourceTagMappingList": [{"ResourceARN": kwargs["ResourceARNList"][0], "Tags": tags}]}
+
+    monkeypatch.setattr(ingest, "_client", lambda name: Tagging())
+    resources = [
+        {"id": "/apis/4u2uhqbi7e/stages/$default", "service": "AmazonApiGateway", "cost": Decimal("0.001")},
+        {"id": "vol-1", "service": "AmazonEC2", "cost": Decimal(2)},
+    ]
+    ingest._name_projects(resources)
+    assert resources[0]["project"] == "portfolio-tracker" and "project" not in resources[1]
+    item = ingest._untagged_item("2026-10", {"resources": resources, "otherCount": 0, "otherCost": Decimal(0)})
+    assert item["resources"]["L"][0]["M"]["project"] == {"S": "portfolio-tracker"}
+
+
+def test_a_failed_project_lookup_leaves_the_rows_alone(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AWS_REGION", "us-east-2")
+    monkeypatch.setenv("PROJECT_TAG", "project")
+
+    class Tagging:
+        def get_resources(self, **kwargs: Any) -> dict[str, Any]:
+            raise RuntimeError("AccessDenied")
+
+    monkeypatch.setattr(ingest, "_client", lambda name: Tagging())
+    resources = [{"id": "/apis/4u2uhqbi7e/stages/$default", "service": "AmazonApiGateway", "cost": Decimal("0.001")}]
+    ingest._name_projects(resources)
+    assert "project" not in resources[0]
+    item = ingest._untagged_item("2026-10", {"resources": resources, "otherCount": 0, "otherCost": Decimal(0)})
+    assert "project" not in item["resources"]["L"][0]["M"]
+
+
+def test_no_tag_lookup_without_api_stage_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AWS_REGION", "us-east-2")
+    monkeypatch.setattr(ingest, "_client", lambda name: pytest.fail("no lookup expected"))
+    ingest._name_projects([{"id": "vol-1", "service": "AmazonEC2", "cost": Decimal(2)}])

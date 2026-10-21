@@ -129,6 +129,11 @@ describe("shortResource", () => {
     expect(shortResource("arn:aws:ec2:us-east-2:235316001927:snapshot/snap-0b83668ed568ac9b3")).toBe("snapshot/snap-0b83668ed568ac9b3"); // only table/ and inference-profile/ are dropped
     expect(shortResource("arn:aws:secretsmanager:us-east-2:235316001927:secret:google/secrets-CX4YJR")).toBe("secret:google/secrets-CX4YJR");
   });
+  it("names an API stage by its project, and leaves it alone without one", () => {
+    expect(shortResource("/apis/4u2uhqbi7e/stages/$default", "portfolio-tracker")).toBe("portfolio-tracker API");
+    expect(shortResource("/apis/4u2uhqbi7e/stages/$default")).toBe("/apis/4u2uhqbi7e/stages/$default");
+    expect(shortResource("vol-1", "portfolio-tracker")).toBe("vol-1"); // only API stages are renamed
+  });
   it("leaves other IDs alone and labels a missing one", () => {
     expect(shortResource("cdk-hnb659fds-assets-235316001927-us-east-2")).toBe("cdk-hnb659fds-assets-235316001927-us-east-2");
     expect(shortResource("arn:aws:s3:::my-bucket")).toBe("my-bucket"); // S3 ARNs have no region or account

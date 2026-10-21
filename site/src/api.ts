@@ -13,6 +13,7 @@ export interface UntaggedResource {
   id: string; // "(no resource ID)" for data transfer, support and similar items
   service: string;
   cost: number;
+  project?: string; // the project tag of an API stage, looked up by the ingest
 }
 export interface Untagged {
   month: string;

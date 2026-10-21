@@ -382,3 +382,10 @@ def test_export_is_tagged_too() -> None:
     Template.from_stack(export).has_resource_properties(
         "AWS::BCMDataExports::Export", {"Tags": Match.array_with([{"Key": "project", "Value": "costwatcher"}])}
     )
+
+
+def test_ingest_may_read_resource_tags_to_name_projects() -> None:
+    _template().has_resource_properties(
+        "AWS::IAM::Policy",
+        {"PolicyDocument": {"Statement": Match.array_with([{"Action": "tag:GetResources", "Effect": "Allow", "Resource": "*"}])}},
+    )
