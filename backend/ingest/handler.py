@@ -16,7 +16,8 @@ QUERY_SECONDS = 120  # per query; the untagged queries also stop short of the La
 NO_RESOURCE = "(no resource ID)"  # data transfer, support and similar items carry no resource ID
 UNTAGGED_LISTED = 25  # resources kept per month; the rest are counted and summed
 UNATTRIBUTED = "unattributed"
-API_STAGE = re.compile(r"/apis/([a-z0-9]+)/stages/[^/]+")  # an HTTP API stage's resource ID: opaque, so its project is looked up
+# An HTTP API stage's resource ID is an ARN ending /apis/<id>/stages/<stage>: opaque, so its project is looked up.
+API_STAGE = re.compile(r"(?:arn:aws:apigateway:([a-z0-9-]+)::)?/apis/([a-z0-9]+)/stages/[^/]+")
 # Bedrock bills the Anthropic models under marketplace product codes; show names instead.
 PRODUCT_NAMES = {
     "3jkxki7g66gt6v02m7pqlqyyx": "Bedrock Claude Opus",
@@ -72,7 +73,8 @@ def _name_projects(resources: list[dict[str, Any]]) -> None:
         for resource in resources:
             match = API_STAGE.fullmatch(resource["id"])
             if match:
-                rows.setdefault(f"arn:aws:apigateway:{os.environ['AWS_REGION']}::/apis/{match[1]}", []).append(resource)
+                region = match[1] or os.environ["AWS_REGION"]
+                rows.setdefault(f"arn:aws:apigateway:{region}::/apis/{match[2]}", []).append(resource)
         if not rows:
             return
         key = os.environ["PROJECT_TAG"].lower()
