@@ -21,6 +21,7 @@ Ideas and bugs found while building CostWatcher. The phased build plan is in [do
 - **Alert thresholds are constants.** Spike (2x the 7-day average and over $0.50), service rise (1.5x and over $1) and the new-service rule live in `backend/ingest/analysis.py`; tune them after a few weeks of real data. Every rule stays silent until 7 days of history exist.
 - **A "new service" alert fires once per service, ever.** Its marker item is never cleared, so a service that goes quiet and returns won't alert again.
 - **Alerts use the latest day, which may be partial.** Each is sent once per date with that day's figure at 08:30 UTC; later revisions aren't reported. A crash between writing the marker and publishing loses that alert, and one failed publish skips the rest of that run's alerts.
+- **Alert baselines count days, not calendar days.** The 7-day window is the last 7 entries in hand, so gaps in the export (or in last month's stored days) stretch it, and a quiet service can look "new" again.
 - **Alert markers are never deleted.** One tiny `ALERT#<month>` item per alert sent; negligible, but they accumulate.
 - **The budget alert duplicates AWS Budgets.** Both warn when the month is forecast to pass the limit; CostWatcher's version also names the range.
 

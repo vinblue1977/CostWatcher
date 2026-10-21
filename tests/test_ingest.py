@@ -200,8 +200,9 @@ def test_failed_publish_releases_the_marker_so_the_next_run_retries(monkeypatch:
 def test_old_data_never_alerts(monkeypatch: pytest.MonkeyPatch) -> None:
     sns = Sns()
     monkeypatch.setattr(ingest, "_client", lambda name: sns)
-    assert ingest._notify(_steady(), dt.date(2026, 10, 20), Marked()) == []
-    assert sns.published == []
+    dynamo = Marked()
+    assert ingest._notify(_steady(), dt.date(2026, 10, 20), dynamo) == []
+    assert sns.published == [] and dynamo.queried == []  # a stale export never reaches the history lookup
 
 
 def _stored(date: str, total: str) -> dict[str, Any]:
@@ -236,16 +237,35 @@ def test_a_full_baseline_skips_the_lookup(monkeypatch: pytest.MonkeyPatch) -> No
     assert dynamo.queried == []
 
 
-def test_stored_days_follow_every_page() -> None:
-    class Paged:
-        calls: list[dict[str, Any]] = []
+def test_stored_days_are_the_newest_few_read_consistently() -> None:
+    class One:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, Any]] = []
 
         def query(self, **kwargs: Any) -> dict[str, Any]:
             self.calls.append(kwargs)
-            if "ExclusiveStartKey" not in kwargs:
-                return {"Items": [_stored("2026-09-29", "2")], "LastEvaluatedKey": {"PK": {"S": "x"}}}
-            return {"Items": [_stored("2026-09-30", "3")]}
+            return {"Items": [_stored("2026-09-30", "3"), _stored("2026-09-29", "2")]}
 
-    days = ingest._stored_days(Paged(), "2026-09")
+    dynamo = One()
+    days = ingest._stored_days(dynamo, "2026-09")
     assert days["2026-09-29"]["total"] == Decimal(2) and days["2026-09-30"]["usageTypes"] == {"u": Decimal(3)}
-    assert len(Paged.calls) == 2
+    assert dynamo.calls[0]["ScanIndexForward"] is False and dynamo.calls[0]["Limit"] == 7 and dynamo.calls[0]["ConsistentRead"]
+
+
+def test_a_failed_history_lookup_still_sends_the_alerts_in_hand(monkeypatch: pytest.MonkeyPatch) -> None:
+    sns, dynamo = Sns(), Marked()
+    monkeypatch.setattr(ingest, "_client", lambda name: sns)
+
+    def broken(**kwargs: Any) -> dict[str, Any]:
+        raise RuntimeError("AccessDenied")
+
+    dynamo.query = broken  # type: ignore[method-assign]
+    assert ingest._notify(_steady(), dt.date(2026, 10, 8), dynamo) == ["budget#2026-10"]
+
+
+def test_an_empty_previous_month_leaves_the_baseline_short(monkeypatch: pytest.MonkeyPatch) -> None:
+    sns, dynamo = Sns(), Marked()
+    monkeypatch.setattr(ingest, "_client", lambda name: sns)
+    day = {"total": Decimal("5"), "services": {"S": Decimal("5")}, "projects": {}, "usageTypes": {}}
+    assert ingest._notify({"2026-10-01": day, "2026-10-02": day}, dt.date(2026, 10, 3), dynamo) == []
+    assert dynamo.queried == ["COST#2026-09"]
