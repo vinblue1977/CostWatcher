@@ -201,9 +201,10 @@ export function friendly(name: string): string {
   return name.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
 }
 
-/** An ARN without its partition, service, region and account, and without a "table/" or "inference-profile/" type prefix ("Orders"); other IDs pass through; no ID gets a label. */
-export function shortResource(id: string): string {
+/** An API stage with a known project reads "<project> API". An ARN without its partition, service, region and account, and without a "table/" or "inference-profile/" type prefix ("Orders"); other IDs pass through; no ID gets a label. */
+export function shortResource(id: string, project?: string): string {
   if (id === "" || id.startsWith("(")) return "(no resource ID)";
+  if (project && /^\/apis\/[a-z0-9]+\/stages\//.test(id)) return `${project} API`; // the API ID alone says nothing
   const parts = id.split(":");
   if (parts[0] !== "arn" || parts.length <= 5 || !parts[5]) return id;
   const resource = parts.slice(5).join(":");

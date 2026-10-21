@@ -16,6 +16,7 @@ QUERY_SECONDS = 120  # per query; the untagged queries also stop short of the La
 NO_RESOURCE = "(no resource ID)"  # data transfer, support and similar items carry no resource ID
 UNTAGGED_LISTED = 25  # resources kept per month; the rest are counted and summed
 UNATTRIBUTED = "unattributed"
+API_STAGE = re.compile(r"/apis/([a-z0-9]+)/stages/[^/]+")  # an HTTP API stage's resource ID: opaque, so its project is looked up
 # Bedrock bills the Anthropic models under marketplace product codes; show names instead.
 PRODUCT_NAMES = {
     "3jkxki7g66gt6v02m7pqlqyyx": "Bedrock Claude Opus",
@@ -54,6 +55,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     for month in months:
         try:
             summary = _untagged(_query(athena, _untagged_sql(month), _spare_seconds(context)))
+            _name_projects(summary["resources"])
             dynamodb.put_item(TableName=os.environ["TABLE_NAME"], Item=_untagged_item(month, summary))
         except Exception as error:
             print(f"Untagged summary for {month} failed: {error!r}")
@@ -61,6 +63,27 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     if failed:
         raise RuntimeError(f"The untagged summary failed for {', '.join(failed)}; costs and alerts were written")
     return {"written": written, "alerts": sent}
+
+
+def _name_projects(resources: list[dict[str, Any]]) -> None:
+    """Adds `project` to API stage rows from the API's current project tag; a failed lookup only leaves the rows as they were."""
+    try:
+        rows: dict[str, list[dict[str, Any]]] = {}  # an API can have several stages, each its own row
+        for resource in resources:
+            match = API_STAGE.fullmatch(resource["id"])
+            if match:
+                rows.setdefault(f"arn:aws:apigateway:{os.environ['AWS_REGION']}::/apis/{match[1]}", []).append(resource)
+        if not rows:
+            return
+        key = os.environ["PROJECT_TAG"].lower()
+        found = _client("resourcegroupstaggingapi").get_resources(ResourceARNList=list(rows))["ResourceTagMappingList"]
+        for entry in found:
+            for tag in entry["Tags"]:
+                if tag["Key"].lower() == key and tag["Value"]:
+                    for resource in rows[entry["ResourceARN"]]:
+                        resource["project"] = tag["Value"]
+    except Exception as error:
+        print(f"Project lookup failed: {error!r}")
 
 
 def _spare_seconds(context: Any) -> int:
@@ -226,6 +249,10 @@ def _untagged(rows: list[dict[str, str]]) -> dict[str, Any]:
     return {"resources": resources, "otherCount": len(rest), "otherCost": sum((c for c, _, _ in rest), Decimal(0))}
 
 
+def _project(resource: dict[str, Any]) -> dict[str, Any]:
+    return {"project": {"S": resource["project"]}} if resource.get("project") else {}
+
+
 def _untagged_item(month: str, summary: dict[str, Any]) -> dict[str, Any]:
     """One item per month under its own key, so `GET /costs/{month}` stays small."""
     return {
@@ -233,7 +260,7 @@ def _untagged_item(month: str, summary: dict[str, Any]) -> dict[str, Any]:
         "SK": {"S": "UNTAGGED"},
         "resources": {
             "L": [
-                {"M": {"id": {"S": r["id"]}, "service": {"S": r["service"]}, "cost": _money(r["cost"])}}
+                {"M": {"id": {"S": r["id"]}, "service": {"S": r["service"]}, "cost": _money(r["cost"]), **_project(r)}}
                 for r in summary["resources"]
             ]
         },

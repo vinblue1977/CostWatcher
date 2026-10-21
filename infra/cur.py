@@ -175,6 +175,8 @@ class Cur(Construct):
                 resources=[f"arn:{stack.partition}:athena:{stack.region}:{stack.account}:workgroup/{WORKGROUP}"],
             )
         )
+        # Names the project of the untagged API stages (read-only; the tagging API has no resource-level permissions).
+        fn.add_to_role_policy(iam.PolicyStatement(actions=["tag:GetResources"], resources=["*"]))
         glue_arn = f"arn:{stack.partition}:glue:{stack.region}:{stack.account}"
         fn.add_to_role_policy(
             iam.PolicyStatement(
