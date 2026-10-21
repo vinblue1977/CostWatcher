@@ -190,8 +190,8 @@ class Cur(Construct):
             schedule=events.Schedule.cron(minute="30", hour="8"),
             targets=[targets.LambdaFunction(fn)],  # pyright: ignore[reportArgumentType]
         )
-        # Sunday mornings: the same Lambda emails the weekly digest. The newest day with data is then Saturday, and the email
-        # names the 7 days it covers.
+        # Sunday mornings: the same Lambda emails the weekly digest. The newest stored day is usually Saturday (the export
+        # lags), sometimes earlier; the email names the 7 days it covers and says when some have no data.
         events.Rule(
             self,
             "Weekly",
