@@ -128,8 +128,8 @@ td.num { font-weight: 600; }
 .coverage .pct { font-size: 36px; font-weight: 700; letter-spacing: -0.02em; }
 .coverage .muted { margin: 0; font-size: 14px; }
 .covbar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--track); }
-.tagged { background: var(--good); }
-.untagged { background: var(--warn); }
+.covbar .tagged, .swatch.tagged { background: var(--good); }
+.covbar .untagged, .swatch.untagged { background: var(--warn); }
 .tabs { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
 .tabs button { min-height: 44px; padding: 0 14px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 13px; font-weight: 500; }
 .tabs button[aria-pressed="true"] { background: #26324a; color: var(--text); font-weight: 600; }

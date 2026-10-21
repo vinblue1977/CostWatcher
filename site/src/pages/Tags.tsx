@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
+import { SignedOut } from "../api";
 import { friendly, money, monthName, previousMonth, tagCoverage } from "../model";
 import type { Day } from "../model";
 import type { Untagged } from "../api";
 import { Empty } from "./parts";
 
-type Load = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; data: Untagged };
+type Load = { kind: "loading" } | { kind: "error"; month: string; message: string } | { kind: "ready"; month: string; data: Untagged };
 
 export function Tags({ days, load }: { days: Day[]; load: (month: string) => Promise<Untagged> }) {
   const latest = days.reduce((max, d) => (d.date > max ? d.date : max), "").slice(0, 7);
   const [last, setLast] = useState(false);
-  const month = last ? previousMonth(latest) : latest;
+  const month = latest && last ? previousMonth(latest) : latest;
   const [state, setState] = useState<Load>({ kind: "loading" });
   const [attempt, setAttempt] = useState(0);
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
@@ -19,8 +20,11 @@ export function Tags({ days, load }: { days: Day[]; load: (month: string) => Pro
     let current = true;
     setState({ kind: "loading" });
     load(month).then(
-      (data) => current && setState({ kind: "ready", data }),
-      (error: unknown) => current && setState({ kind: "error", message: error instanceof Error ? error.message : "something went wrong" }),
+      (data) => current && setState({ kind: "ready", month, data }),
+      (error: unknown) => {
+        if (error instanceof SignedOut) return window.location.reload(); // the app then shows its sign-in screen
+        if (current) setState({ kind: "error", month, message: error instanceof Error ? error.message : "something went wrong" });
+      },
     );
     return () => {
       current = false;
@@ -29,6 +33,8 @@ export function Tags({ days, load }: { days: Day[]; load: (month: string) => Pro
 
   if (days.length === 0) return <Empty />;
   const coverage = tagCoverage(days, month);
+  const shown: Load = state.kind !== "loading" && state.month !== month ? { kind: "loading" } : state; // never a stale month's rows
+  const untaggedPct = coverage ? 100 - Math.round(coverage.pct) : 0;
   return (
     <>
       <p className="lead">
@@ -43,13 +49,13 @@ export function Tags({ days, load }: { days: Day[]; load: (month: string) => Pro
           <div className="coverage">
             <span className="pct">{Math.round(coverage.pct)}%</span>
             <span className="muted">
-              tagged · {money(coverage.untagged)} ({Math.round(100 - coverage.pct)}%) has no project tag
+              tagged · {money(coverage.untagged)} ({untaggedPct}%) has no project tag
             </span>
           </div>
           <div
             className="covbar"
             role="img"
-            aria-label={`${Math.round(coverage.pct)} percent tagged, ${Math.round(100 - coverage.pct)} percent untagged`}
+            aria-label={`${Math.round(coverage.pct)} percent tagged, ${untaggedPct} percent untagged`}
           >
             <span className="tagged" style={{ width: `${coverage.pct}%` }} />
             <span className="untagged" style={{ width: `${100 - coverage.pct}%` }} />
@@ -84,7 +90,7 @@ export function Tags({ days, load }: { days: Day[]; load: (month: string) => Pro
             </button>
           </div>
         </div>
-        <Resources state={state} untagged={coverage?.untagged ?? 0} retry={retry} />
+        <Resources state={shown} retry={retry} />
       </section>
 
       <p className="alert soft">
@@ -95,7 +101,7 @@ export function Tags({ days, load }: { days: Day[]; load: (month: string) => Pro
   );
 }
 
-function Resources({ state, untagged, retry }: { state: Load; untagged: number; retry: () => void }) {
+function Resources({ state, retry }: { state: Load; retry: () => void }) {
   if (state.kind === "loading") return <p className="muted" role="status">Loading…</p>;
   if (state.kind === "error") {
     return (
@@ -107,7 +113,7 @@ function Resources({ state, untagged, retry }: { state: Load; untagged: number; 
   }
   const { resources, otherCount, otherCost } = state.data;
   if (resources.length === 0) return <p className="muted">Nothing without a project tag in this month's data.</p>;
-  const denominator = untagged > 0 ? untagged : (resources[0]?.cost ?? 1);
+  const denominator = resources.reduce((sum, r) => sum + r.cost, otherCost) || 1; // this list's own total, so shares add up
   return (
     <>
       <div className="table-wrap">
@@ -121,8 +127,8 @@ function Resources({ state, untagged, retry }: { state: Load; untagged: number; 
             </tr>
           </thead>
           <tbody>
-            {resources.map((r) => (
-              <tr key={`${r.id}|${r.service}`}>
+            {resources.map((r, i) => (
+              <tr key={`${i}|${r.id}`}>
                 <td className="mono">{r.id.startsWith("(") ? "No resource ID" : r.id}</td>
                 <td>{friendly(r.service)}</td>
                 <td className="share-col">
