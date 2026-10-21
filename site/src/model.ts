@@ -207,7 +207,7 @@ export function shortResource(id: string, project?: string): string {
   const parts = id.split(":");
   if (parts[0] !== "arn" || parts.length <= 5 || !parts[5]) return id;
   const resource = parts.slice(5).join(":");
-  if (project && /^\/apis\/[a-z0-9]+\/stages\//.test(resource)) return `${project} API`; // the API ID alone says nothing
+  if (project && parts[2] === "apigateway" && /^\/apis\/[a-z0-9]+\/stages\//.test(resource)) return `${project} API`; // the API ID alone says nothing
   return resource.replace(/^(inference-profile|table)\//, "") || resource; // never an empty name
 }
 

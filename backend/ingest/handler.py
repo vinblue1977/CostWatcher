@@ -73,8 +73,9 @@ def _name_projects(resources: list[dict[str, Any]]) -> None:
         for resource in resources:
             match = API_STAGE.fullmatch(resource["id"])
             if match:
-                region = match[1] or os.environ["AWS_REGION"]
-                rows.setdefault(f"arn:aws:apigateway:{region}::/apis/{match[2]}", []).append(resource)
+                region = os.environ["AWS_REGION"]  # the tagging client is regional: a stage from another region is left alone
+                if match[1] in (None, region):
+                    rows.setdefault(f"arn:aws:apigateway:{region}::/apis/{match[2]}", []).append(resource)
         if not rows:
             return
         key = os.environ["PROJECT_TAG"].lower()
@@ -82,7 +83,7 @@ def _name_projects(resources: list[dict[str, Any]]) -> None:
         for entry in found:
             for tag in entry["Tags"]:
                 if tag["Key"].lower() == key and tag["Value"]:
-                    for resource in rows[entry["ResourceARN"]]:
+                    for resource in rows.get(entry["ResourceARN"], []):
                         resource["project"] = tag["Value"]
     except Exception as error:
         print(f"Project lookup failed: {error!r}")

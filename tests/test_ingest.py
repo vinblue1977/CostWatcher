@@ -426,6 +426,26 @@ def test_api_stage_rows_get_the_project_tag_of_their_api(monkeypatch: pytest.Mon
     assert item["resources"]["L"][0]["M"]["project"] == {"S": "portfolio-tracker"}
 
 
+def test_stages_from_other_regions_and_bare_ids_are_handled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AWS_REGION", "us-east-2")
+    monkeypatch.setenv("PROJECT_TAG", "project")
+    asked: list[list[str]] = []
+
+    class Tagging:
+        def get_resources(self, **kwargs: Any) -> dict[str, Any]:
+            asked.append(kwargs["ResourceARNList"])
+            tags = [{"Key": "project", "Value": "tennis-tracker"}]
+            arn = "arn:aws:apigateway:us-east-2::/apis/bare1"
+            return {"ResourceTagMappingList": [{"ResourceARN": arn, "Tags": tags}]}
+
+    monkeypatch.setattr(ingest, "_client", lambda name: Tagging())
+    elsewhere = {"id": "arn:aws:apigateway:us-west-2::/apis/far1/stages/x", "service": "AmazonApiGateway", "cost": Decimal(1)}
+    bare = {"id": "/apis/bare1/stages/x", "service": "AmazonApiGateway", "cost": Decimal(1)}
+    ingest._name_projects([elsewhere, bare])
+    assert asked == [["arn:aws:apigateway:us-east-2::/apis/bare1"]]  # the other region's stage is not asked about
+    assert "project" not in elsewhere and bare["project"] == "tennis-tracker"
+
+
 def test_a_failed_project_lookup_leaves_the_rows_alone(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AWS_REGION", "us-east-2")
     monkeypatch.setenv("PROJECT_TAG", "project")
