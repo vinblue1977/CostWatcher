@@ -20,6 +20,7 @@ UNATTRIBUTED = "unattributed"
 PRODUCT_NAMES = {
     "3jkxki7g66gt6v02m7pqlqyyx": "Bedrock Claude Opus",
     "7g37zhparap7eesm9k78jrzqc": "Bedrock Claude Haiku",
+    "9svps415mdwhhoxlp2tx3hald": "Bedrock Claude Sonnet",
 }
 ALERT_FRESH_DAYS = 3  # a hand-run backfill of old months must not email about them
 
