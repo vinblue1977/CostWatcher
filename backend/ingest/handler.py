@@ -166,9 +166,13 @@ def _tag_column() -> str:
     return f"user_{key}"
 
 
+def _quote(value: str) -> str:
+    return value.replace("'", "''")
+
+
 def _service_sql() -> str:
     """The service column: the product code, with known marketplace codes replaced by their names."""
-    cases = "".join(f"WHEN '{code}' THEN '{name}' " for code, name in PRODUCT_NAMES.items())
+    cases = "".join(f"WHEN '{_quote(code)}' THEN '{_quote(name)}' " for code, name in PRODUCT_NAMES.items())
     return f"CASE line_item_product_code {cases}ELSE COALESCE(NULLIF(line_item_product_code, ''), 'unknown') END"
 
 
