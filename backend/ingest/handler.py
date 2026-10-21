@@ -16,6 +16,11 @@ QUERY_SECONDS = 120  # per query; the untagged queries also stop short of the La
 NO_RESOURCE = "(no resource ID)"  # data transfer, support and similar items carry no resource ID
 UNTAGGED_LISTED = 25  # resources kept per month; the rest are counted and summed
 UNATTRIBUTED = "unattributed"
+# Bedrock bills the Anthropic models under marketplace product codes; show names instead.
+PRODUCT_NAMES = {
+    "3jkxki7g66gt6v02m7pqlqyyx": "Bedrock Claude Opus",
+    "7g37zhparap7eesm9k78jrzqc": "Bedrock Claude Haiku",
+}
 ALERT_FRESH_DAYS = 3  # a hand-run backfill of old months must not email about them
 
 
@@ -161,6 +166,12 @@ def _tag_column() -> str:
     return f"user_{key}"
 
 
+def _service_sql() -> str:
+    """The service column: the product code, with known marketplace codes replaced by their names."""
+    cases = "".join(f"WHEN '{code}' THEN '{name}' " for code, name in PRODUCT_NAMES.items())
+    return f"CASE line_item_product_code {cases}ELSE COALESCE(NULLIF(line_item_product_code, ''), 'unknown') END"
+
+
 def _sql(month: str) -> str:
     if not MONTH.fullmatch(month):
         raise ValueError("month must look like 2026-10")
@@ -168,7 +179,7 @@ def _sql(month: str) -> str:
     # Only the validated month, the normalized tag key and the deployed table name are interpolated.
     return (
         "SELECT CAST(date(line_item_usage_start_date) AS varchar) AS day, "  # noqa: S608
-        "COALESCE(NULLIF(line_item_product_code, ''), 'unknown') AS service, "
+        f"{_service_sql()} AS service, "
         "COALESCE(NULLIF(line_item_usage_type, ''), 'unknown') AS usage_type, "
         f"COALESCE(NULLIF(element_at(resource_tags, '{_tag_column()}'), ''), '{UNATTRIBUTED}') AS project, "
         "SUM(line_item_unblended_cost) AS cost "
@@ -183,7 +194,7 @@ def _untagged_sql(month: str) -> str:
     table = f'"{os.environ["ATHENA_DATABASE"]}"."{os.environ["ATHENA_TABLE"]}"'
     return (
         "SELECT COALESCE(NULLIF(line_item_resource_id, ''), '') AS resource, "  # noqa: S608
-        "COALESCE(NULLIF(line_item_product_code, ''), 'unknown') AS service, "
+        f"{_service_sql()} AS service, "
         "SUM(line_item_unblended_cost) AS cost "
         f"FROM {table} WHERE billing_period = '{month}' "
         f"AND NULLIF(element_at(resource_tags, '{_tag_column()}'), '') IS NULL "

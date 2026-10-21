@@ -385,3 +385,9 @@ def test_untagged_queries_stop_before_the_lambda_does() -> None:
     assert ingest._spare_seconds(Context(50_000)) == 30
     with pytest.raises(TimeoutError):
         ingest._spare_seconds(Context(15_000))
+
+
+def test_known_marketplace_product_codes_are_named() -> None:
+    for sql in (ingest._sql("2026-10"), ingest._untagged_sql("2026-10")):
+        assert "WHEN '3jkxki7g66gt6v02m7pqlqyyx' THEN 'Bedrock Claude Opus'" in sql
+        assert "ELSE COALESCE(NULLIF(line_item_product_code, ''), 'unknown') END AS service" in sql
