@@ -76,7 +76,7 @@ export function Spikes({ days }: { days: Day[] }) {
                     <span className="name">Service</span>
                     <span className="track" />
                     <span className="amount">{shortDate(day.date)}</span>
-                    <span className="amount">vs avg</span>
+                    <span className="amount" title="Bars show the change vs the 7-day average">vs avg</span>
                   </li>
                   {changed.map((c) => (
                     <li key={c.name}>
@@ -85,7 +85,7 @@ export function Spikes({ days }: { days: Day[] }) {
                         <span className={`fill ${c.delta < 0 ? "neg" : ""}`} style={{ width: `${(Math.abs(c.delta) / biggest) * 100}%` }} />
                       </span>
                       <span className="amount">{money(c.cost ?? 0)}</span>
-                      <span className="amount">{signedMoney(c.delta)}</span>
+                      <span className="amount">{Math.abs(c.delta) < 0.005 ? "–" : signedMoney(c.delta)}</span>
                     </li>
                   ))}
                 </ul>
@@ -107,7 +107,7 @@ export function Spikes({ days }: { days: Day[] }) {
                         <tr key={u.name}>
                           <td title={u.name}>{usageLabel(u.name)}</td>
                           <td className="num">{money(u.cost ?? 0)}</td>
-                          <td className="num">{signedMoney(u.delta)}</td>
+                          <td className="num">{Math.abs(u.delta) < 0.005 ? "–" : signedMoney(u.delta)}</td>
                         </tr>
                       ))}
                     </tbody>
