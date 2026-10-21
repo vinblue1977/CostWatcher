@@ -34,17 +34,18 @@ export function StackedBars({ data, bases }: { data: Stack; bases: Map<string, B
         {data.rows.map((row) => {
           const base = bases.get(row.date);
           const spike = base ? isSpike(row.total, base.usual) : false;
+          const stacked = row.parts.reduce((a, b) => a + b, 0); // credits fold into the total only, so the parts may not add up to it
           return (
             <div className="bar" key={row.date}>
               {spike && <span className="flag">{money(row.total)}</span>}
-              <div className="stack">
+              <div className="stack" style={{ height: `${(stacked / max) * 100}%` }}>
                 {row.parts.map((part, i) => {
                   const name = data.names[i] ?? OTHER;
                   return (
                     <div
                       key={name}
                       title={`${friendly(name)}: ${money(part)}`}
-                      style={{ height: `${(part / max) * 100}%`, background: color(data.names, name) }}
+                      style={{ height: `${stacked > 0 ? (part / stacked) * 100 : 0}%`, background: color(data.names, name) }}
                     />
                   );
                 })}
