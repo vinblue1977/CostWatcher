@@ -44,6 +44,19 @@ class FakeAthena:
 HEADER = ["day", "service", "usage_type", "project", "cost"]
 
 
+class DailyAndUntaggedAthena(FakeAthena):
+    """Answers the daily query and then the untagged one, as the handler sends them for each month."""
+
+    def __init__(self) -> None:
+        super().__init__("SUCCEEDED", "SUCCEEDED", pages=[])
+
+    def start_query_execution(self, **kwargs: Any) -> dict[str, str]:
+        daily = [HEADER, ["2026-10-01", "AmazonS3", "Storage", "web", "2"]]
+        untagged = [["resource", "service", "cost"], ["vol-1", "AmazonEC2", "1"]]
+        self.pages = [daily if "AS day" in kwargs["QueryString"] else untagged]
+        return super().start_query_execution(**kwargs)
+
+
 def test_mid_month_reads_only_this_month() -> None:
     assert ingest._months({}, dt.date(2026, 10, 20)) == ["2026-10"]
 
@@ -122,7 +135,7 @@ def test_failed_query_raises_with_the_reason() -> None:
 
 
 def test_handler_writes_one_item_per_day(monkeypatch: pytest.MonkeyPatch) -> None:
-    athena = FakeAthena("SUCCEEDED", pages=[[HEADER, ["2026-10-01", "AmazonS3", "Storage", "web", "2"]]])
+    athena = DailyAndUntaggedAthena()
 
     class FakeDynamo:
         puts: list[dict[str, Any]] = []
@@ -134,6 +147,7 @@ def test_handler_writes_one_item_per_day(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(ingest, "_client", lambda name: athena if name == "athena" else dynamo)
     assert ingest.handler({"months": ["2026-10"]}, None) == {"written": {"2026-10": 1}, "alerts": []}
     assert dynamo.puts[0]["TableName"] == "costs" and dynamo.puts[0]["Item"]["SK"] == {"S": "DAY#2026-10-01"}
+    assert [p["Item"]["PK"]["S"] for p in dynamo.puts] == ["COST#2026-10", "HYGIENE#2026-10"]  # the untagged summary too
 
 
 class Marked:
@@ -294,3 +308,45 @@ def test_the_digest_event_skips_the_athena_run(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(ingest, "_client", lambda name: object())
     monkeypatch.setattr(ingest, "_digest", lambda client, today: True)
     assert ingest.handler({"digest": True}, None) == {"digest": True}
+
+
+def test_untagged_query_is_bound_to_one_partition_and_keeps_only_untagged_cost() -> None:
+    sql = ingest._untagged_sql("2026-10")
+    assert "billing_period = '2026-10'" in sql and '"costwatcher"."cur"' in sql
+    assert "NULLIF(element_at(resource_tags, 'user_project'), '') IS NULL" in sql and "HAVING SUM(" in sql
+    with pytest.raises(ValueError, match="month"):
+        ingest._untagged_sql("2026-10' OR 1=1 --")
+
+
+def test_untagged_ranks_resources_and_counts_the_rest(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ingest, "UNTAGGED_LISTED", 2)
+    rows = [
+        {"resource": "vol-1", "service": "AmazonEC2", "cost": "2"},
+        {"resource": "", "service": "AWSSupport", "cost": "1"},
+        {"resource": "", "service": "AmazonEC2", "cost": "2"},
+        {"resource": "", "service": "AmazonS3", "cost": "0.5"},
+        {"resource": "fn", "service": "AWSLambda", "cost": "0.25"},
+        {"resource": "log", "service": "AmazonCloudWatch", "cost": "0.1"},
+    ]
+    summary = ingest._untagged(rows)
+    assert summary["resources"] == [
+        {"id": "", "service": "AmazonEC2, AWSSupport +1 more", "cost": Decimal("3.5")},
+        {"id": "vol-1", "service": "AmazonEC2", "cost": Decimal(2)},
+    ]
+    assert summary["otherCount"] == 2 and summary["otherCost"] == Decimal("0.35")
+
+
+def test_untagged_rejects_non_finite_costs() -> None:
+    with pytest.raises(ValueError, match="non-finite"):
+        ingest._untagged([{"resource": "x", "service": "s", "cost": "NaN"}])
+
+
+def test_untagged_item_has_its_own_key_and_rounds_money() -> None:
+    summary = {
+        "resources": [{"id": "vol-1", "service": "AmazonEC2", "cost": Decimal("1.5")}],
+        "otherCount": 4,
+        "otherCost": Decimal("0.3"),
+    }
+    item = ingest._untagged_item("2026-10", summary)
+    assert item["PK"] == {"S": "HYGIENE#2026-10"} and item["SK"] == {"S": "UNTAGGED"}
+    assert item["resources"]["L"][0]["M"]["cost"] == {"N": "1.500000"} and item["otherCount"] == {"N": "4"}

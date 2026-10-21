@@ -1,4 +1,4 @@
-"""HTTP API Lambda: the signed-in user's daily cost aggregates, read from DynamoDB (the dashboard never calls Athena)."""
+"""HTTP API Lambda: the signed-in user's daily cost aggregates and untagged resources, read from DynamoDB, never Athena."""
 
 import json
 import os
@@ -26,6 +26,8 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return _json(401, {"error": "unauthorized"})
     if event.get("routeKey") == "GET /costs/{month}":
         return _costs((event.get("pathParameters") or {}).get("month", ""))
+    if event.get("routeKey") == "GET /tags/{month}":
+        return _untagged((event.get("pathParameters") or {}).get("month", ""))
     return _json(404, {"error": "not found"})
 
 
@@ -45,6 +47,20 @@ def _costs(month: str, table: Any = None) -> dict[str, Any]:
         query["ExclusiveStartKey"] = page["LastEvaluatedKey"]
     days = [{**{k: v for k, v in i.items() if k not in ("PK", "SK")}, "date": i["SK"].removeprefix("DAY#")} for i in items]
     return _json(200, {"month": month, "days": days})
+
+
+def _untagged(month: str, table: Any = None) -> dict[str, Any]:
+    """The month's costliest resources without a project tag (PK HYGIENE#<month>), which the ingest Lambda rewrites daily."""
+    if not MONTH.fullmatch(month):
+        return _json(400, {"error": "month must look like 2026-10"})
+    table = table or _days_table()
+    page = table.query(
+        KeyConditionExpression="PK = :pk AND SK = :sk",
+        ExpressionAttributeValues={":pk": f"HYGIENE#{month}", ":sk": "UNTAGGED"},
+        ConsistentRead=True,
+    )
+    item = page["Items"][0] if page["Items"] else {"resources": [], "otherCount": 0, "otherCost": 0}
+    return _json(200, {"month": month, **{k: item[k] for k in ("resources", "otherCount", "otherCost")}})
 
 
 def _json(status: int, body: dict[str, Any]) -> dict[str, Any]:
