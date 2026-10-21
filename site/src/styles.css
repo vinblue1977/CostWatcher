@@ -124,6 +124,20 @@ td { padding: 11px 12px 11px 0; border-top: 1px solid var(--line); overflow-wrap
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 td.num { font-weight: 600; }
 
+.coverage { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 16px 0 12px; }
+.coverage .pct { font-size: 36px; font-weight: 700; letter-spacing: -0.02em; }
+.coverage .muted { margin: 0; font-size: 14px; }
+.covbar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--track); }
+.tagged { background: var(--good); }
+.untagged { background: var(--warn); }
+.tabs { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+.tabs button { min-height: 44px; padding: 0 14px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 13px; font-weight: 500; }
+.tabs button[aria-pressed="true"] { background: #26324a; color: var(--text); font-weight: 600; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: var(--text-2); }
+.share-col { width: 220px; }
+.fill.warn { background: var(--warn); }
+td .track { display: block; }
+
 @media (max-width: 640px) {
   .top { padding: calc(12px + env(safe-area-inset-top)) 16px 12px; gap: 12px; justify-content: space-between; }
   .brand { font-size: 17px; min-width: 0; }
@@ -152,4 +166,7 @@ td.num { font-weight: 600; }
   .picker { height: 130px; gap: 3px; }
   .picker button { min-width: 0; }
   td, th { padding-right: 8px; }
+  .tabs { width: 100%; }
+  .tabs button { flex: 1 1 0; }
+  .share-col { display: none; }
 }

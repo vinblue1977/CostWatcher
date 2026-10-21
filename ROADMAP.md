@@ -8,7 +8,6 @@ Ideas and bugs found while building CostWatcher. The phased build plan is in [do
 - **Multiple accounts.** AWS Organizations-wide CUR with an account filter in the dashboard.
 - **Cost Explorer backfill.** A one-off pull of up to 13 months of history (about a dozen calls, roughly $0.10), since the export has no data before it is created.
 - **Per-project budgets.** Alert when one tagged project passes its own limit, not just the account.
-- **Tag hygiene report.** List the top untagged resources by cost so the "unattributed" bucket shrinks.
 - **Custom domain.** Optional later; the CloudFront URL is fine for personal use.
 
 - **Unit costs.** Cost per 1,000 Lambda invocations or per GB stored needs usage quantities; add `line_item_usage_amount` to the export columns and the ingest query first.
