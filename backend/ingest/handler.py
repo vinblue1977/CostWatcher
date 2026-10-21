@@ -12,7 +12,9 @@ from ingest import analysis
 MONTH = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
 REVISION_DAYS = 5  # early in a month, the previous month is still being revised
 POLL_SECONDS = 2
-QUERY_SECONDS = 120  # two months of queries must fit in the Lambda's 5 minutes
+QUERY_SECONDS = 120  # per query; the untagged queries also stop short of the Lambda's own timeout (see _spare_seconds)
+NO_RESOURCE = "(no resource ID)"  # data transfer, support and similar items carry no resource ID
+UNTAGGED_LISTED = 25  # resources kept per month; the rest are counted and summed
 UNATTRIBUTED = "unattributed"
 ALERT_FRESH_DAYS = 3  # a hand-run backfill of old months must not email about them
 
@@ -41,7 +43,26 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         written[month] = len(days)
         seen.update(days)
     sent = _notify(seen, dt.datetime.now(dt.UTC).date(), dynamodb)
+    # The untagged summary comes last and is isolated: a failure must not cost the day's alerts, but must still fail the run.
+    failed = []
+    for month in months:
+        try:
+            summary = _untagged(_query(athena, _untagged_sql(month), _spare_seconds(context)))
+            dynamodb.put_item(TableName=os.environ["TABLE_NAME"], Item=_untagged_item(month, summary))
+        except Exception as error:
+            print(f"Untagged summary for {month} failed: {error!r}")
+            failed.append(month)
+    if failed:
+        raise RuntimeError(f"The untagged summary failed for {', '.join(failed)}; costs and alerts were written")
     return {"written": written, "alerts": sent}
+
+
+def _spare_seconds(context: Any) -> int:
+    """How long the optional queries may run: the usual limit, or what the Lambda has left minus a margin for the write."""
+    left = getattr(context, "get_remaining_time_in_millis", lambda: QUERY_SECONDS * 1000 + 20_000)() // 1000 - 20
+    if left < 1:
+        raise TimeoutError("no time left in the Lambda for the untagged summary")
+    return min(QUERY_SECONDS, left)
 
 
 def _months(event: dict[str, Any], today: dt.date) -> list[str]:
@@ -155,10 +176,61 @@ def _sql(month: str) -> str:
     )
 
 
-def _query(athena: Any, sql: str) -> list[dict[str, str]]:
+def _untagged_sql(month: str) -> str:
+    """Cost per resource and service among the line items that carry no project tag."""
+    if not MONTH.fullmatch(month):
+        raise ValueError("month must look like 2026-10")
+    table = f'"{os.environ["ATHENA_DATABASE"]}"."{os.environ["ATHENA_TABLE"]}"'
+    return (
+        "SELECT COALESCE(NULLIF(line_item_resource_id, ''), '') AS resource, "  # noqa: S608
+        "COALESCE(NULLIF(line_item_product_code, ''), 'unknown') AS service, "
+        "SUM(line_item_unblended_cost) AS cost "
+        f"FROM {table} WHERE billing_period = '{month}' "
+        f"AND NULLIF(element_at(resource_tags, '{_tag_column()}'), '') IS NULL "
+        "GROUP BY 1, 2 HAVING SUM(line_item_unblended_cost) > 0"
+    )
+
+
+def _untagged(rows: list[dict[str, str]]) -> dict[str, Any]:
+    """The costliest untagged resources, with the rest counted and summed. Items with no resource ID share one entry."""
+    found: dict[str, dict[str, Decimal]] = {}
+    for row in rows:
+        cost = Decimal(row["cost"] or "0")
+        if not cost.is_finite():
+            raise ValueError(f"non-finite cost for {row['resource']} {row['service']}: {row['cost']}")
+        services = found.setdefault(row["resource"], {})
+        services[row["service"]] = services.get(row["service"], Decimal(0)) + cost
+    ranked = sorted(((sum(s.values(), Decimal(0)), rid, s) for rid, s in found.items()), key=lambda t: (-t[0], t[1]))
+    resources = []
+    for cost, rid, services in ranked[:UNTAGGED_LISTED]:
+        names = sorted(services, key=lambda n: (-services[n], n))
+        service = ", ".join(names[:2]) + (f" +{len(names) - 2} more" if len(names) > 2 else "")
+        resources.append({"id": rid, "service": service, "cost": cost})
+    rest = ranked[UNTAGGED_LISTED:]
+    return {"resources": resources, "otherCount": len(rest), "otherCost": sum((c for c, _, _ in rest), Decimal(0))}
+
+
+def _untagged_item(month: str, summary: dict[str, Any]) -> dict[str, Any]:
+    """One item per month under its own key, so `GET /costs/{month}` stays small."""
+    return {
+        "PK": {"S": f"HYGIENE#{month}"},
+        "SK": {"S": "UNTAGGED"},
+        "resources": {
+            "L": [
+                {"M": {"id": {"S": r["id"]}, "service": {"S": r["service"]}, "cost": _money(r["cost"])}}
+                for r in summary["resources"]
+            ]
+        },
+        "otherCount": {"N": str(summary["otherCount"])},
+        "otherCost": _money(summary["otherCost"]),
+    }
+
+
+def _query(athena: Any, sql: str, seconds: int | None = None) -> list[dict[str, str]]:
     """Runs one query in the cost-capped workgroup and returns its rows as dicts of strings."""
     run = athena.start_query_execution(QueryString=sql, WorkGroup=os.environ["ATHENA_WORKGROUP"])["QueryExecutionId"]
-    deadline = time.monotonic() + QUERY_SECONDS
+    limit = QUERY_SECONDS if seconds is None else seconds
+    deadline = time.monotonic() + limit
     while True:
         status = athena.get_query_execution(QueryExecutionId=run)["QueryExecution"]["Status"]
         if status["State"] == "SUCCEEDED":
@@ -167,7 +239,7 @@ def _query(athena: Any, sql: str) -> list[dict[str, str]]:
             raise RuntimeError(f"Athena query {status['State'].lower()}: {status.get('StateChangeReason', 'no reason given')}")
         if time.monotonic() > deadline:
             athena.stop_query_execution(QueryExecutionId=run)  # don't leave a billed query running past the Lambda
-            raise RuntimeError(f"Athena query still {status['State'].lower()} after {QUERY_SECONDS} seconds; cancelled")
+            raise RuntimeError(f"Athena query still {status['State'].lower()} after {limit} seconds; cancelled")
         time.sleep(POLL_SECONDS)
     rows: list[dict[str, str]] = []
     header: list[str] = []

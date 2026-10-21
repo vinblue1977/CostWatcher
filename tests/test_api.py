@@ -61,3 +61,41 @@ def test_handler_routes_to_costs_and_reads_consistently(monkeypatch: Any) -> Non
     response = api.handler(_event(), None)
     assert json.loads(response["body"])["days"] == [{"date": "2026-10-03", "n": 3}]
     assert table.queries[0]["ConsistentRead"] is True
+
+
+def test_untagged_returns_the_stored_summary_or_an_empty_one() -> None:
+    item = {
+        "PK": "HYGIENE#2026-10",
+        "SK": "UNTAGGED",
+        "resources": [{"id": "vol-1", "service": "AmazonEC2", "cost": Decimal("1.5")}],
+        "otherCount": Decimal(3),
+        "otherCost": Decimal("0.25"),
+    }
+    table = FakeTable({"Items": [item]}, {"Items": []})
+    body = json.loads(api._untagged("2026-10", table)["body"])
+    assert body == {
+        "month": "2026-10",
+        "resources": [{"id": "vol-1", "service": "AmazonEC2", "cost": 1.5}],
+        "otherCount": 3,
+        "otherCost": 0.25,
+    }
+    assert table.queries[0]["ExpressionAttributeValues"] == {":pk": "HYGIENE#2026-10", ":sk": "UNTAGGED"}
+    assert table.queries[0]["ConsistentRead"] is True
+    assert json.loads(api._untagged("2026-09", table)["body"]) == {
+        "month": "2026-09",
+        "resources": [],
+        "otherCount": 0,
+        "otherCost": 0,
+    }
+
+
+def test_handler_routes_tags_and_validates_the_month(monkeypatch: Any) -> None:
+    table = FakeTable({"Items": []})
+    monkeypatch.setattr(api, "_days_table", lambda: table)
+    assert api.handler(_event("GET /tags/{month}"), None)["statusCode"] == 200
+    assert api.handler(_event("GET /tags/{month}", month="nope"), None)["statusCode"] == 400
+
+
+def test_untagged_tolerates_a_partial_item() -> None:
+    body = json.loads(api._untagged("2026-10", FakeTable({"Items": [{"PK": "HYGIENE#2026-10", "SK": "UNTAGGED"}]}))["body"])
+    assert body == {"month": "2026-10", "resources": [], "otherCount": 0, "otherCost": 0}
