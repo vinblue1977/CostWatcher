@@ -91,6 +91,7 @@ export interface Mover {
   name: string;
   delta: number;
   pct: number | null; // null when the key had no cost in the earlier week
+  cost?: number; // the key's own cost, set by drivers()
 }
 
 /** Keys whose cost changed most between the last 7 days and the 7 before. Null until two weeks exist. */
@@ -176,12 +177,12 @@ export function isSpike(total: number, usual: number): boolean {
   return total > usual * SPIKE_FACTOR && total - usual > SPIKE_MIN;
 }
 
-/** Signed change of each key against its baseline, largest first. */
+/** Each key's own cost and signed change against its baseline, largest change first. Keys that cost something are kept even when unchanged. */
 export function drivers(current: Record<string, number>, usual: Record<string, number>, limit = 6): Mover[] {
   const keys = new Set([...Object.keys(current), ...Object.keys(usual)]);
   return [...keys]
-    .map((name) => ({ name, delta: (current[name] ?? 0) - (usual[name] ?? 0), pct: null }))
-    .filter((m) => Math.abs(m.delta) >= 0.005)
+    .map((name) => ({ name, cost: current[name] ?? 0, delta: (current[name] ?? 0) - (usual[name] ?? 0), pct: null }))
+    .filter((m) => Math.abs(m.delta) >= 0.005 || Math.abs(m.cost) >= 0.005)
     .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta) || a.name.localeCompare(b.name))
     .slice(0, limit);
 }

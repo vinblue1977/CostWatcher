@@ -70,7 +70,7 @@ describe("spikes", () => {
     const found = latestSpike(days);
     expect(found?.day.date).toBe("2026-10-08");
     const moved = drivers(found!.day.services, found!.base.services);
-    expect(moved[0]).toMatchObject({ name: "AmazonVPC", delta: 8 });
+    expect(moved[0]).toMatchObject({ name: "AmazonVPC", delta: 8, cost: 8 });
   });
 });
 

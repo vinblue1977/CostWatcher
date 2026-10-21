@@ -72,12 +72,19 @@ export function Spikes({ days }: { days: Day[] }) {
                 <h2 id="drv-h">What changed</h2>
                 <p className="muted">{shortDate(day.date)} vs the trailing 7-day average, by service</p>
                 <ul className="ranked">
+                  <li className="cols" aria-hidden="true">
+                    <span className="name">Service</span>
+                    <span className="track" />
+                    <span className="amount">{shortDate(day.date)}</span>
+                    <span className="amount">vs avg</span>
+                  </li>
                   {changed.map((c) => (
                     <li key={c.name}>
                       <span className="name">{friendly(c.name)}</span>
                       <span className="track">
                         <span className={`fill ${c.delta < 0 ? "neg" : ""}`} style={{ width: `${(Math.abs(c.delta) / biggest) * 100}%` }} />
                       </span>
+                      <span className="amount">{money(c.cost ?? 0)}</span>
                       <span className="amount">{signedMoney(c.delta)}</span>
                     </li>
                   ))}
@@ -91,13 +98,15 @@ export function Spikes({ days }: { days: Day[] }) {
                     <thead>
                       <tr>
                         <th scope="col">Usage type</th>
-                        <th scope="col" className="num">Change</th>
+                        <th scope="col" className="num">{shortDate(day.date)}</th>
+                        <th scope="col" className="num">vs avg</th>
                       </tr>
                     </thead>
                     <tbody>
                       {usage.map((u) => (
                         <tr key={u.name}>
                           <td title={u.name}>{usageLabel(u.name)}</td>
+                          <td className="num">{money(u.cost ?? 0)}</td>
                           <td className="num">{signedMoney(u.delta)}</td>
                         </tr>
                       ))}
