@@ -94,3 +94,8 @@ def test_handler_routes_tags_and_validates_the_month(monkeypatch: Any) -> None:
     monkeypatch.setattr(api, "_days_table", lambda: table)
     assert api.handler(_event("GET /tags/{month}"), None)["statusCode"] == 200
     assert api.handler(_event("GET /tags/{month}", month="nope"), None)["statusCode"] == 400
+
+
+def test_untagged_tolerates_a_partial_item() -> None:
+    body = json.loads(api._untagged("2026-10", FakeTable({"Items": [{"PK": "HYGIENE#2026-10", "SK": "UNTAGGED"}]}))["body"])
+    assert body == {"month": "2026-10", "resources": [], "otherCount": 0, "otherCost": 0}

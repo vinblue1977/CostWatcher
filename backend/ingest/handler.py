@@ -12,7 +12,8 @@ from ingest import analysis
 MONTH = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
 REVISION_DAYS = 5  # early in a month, the previous month is still being revised
 POLL_SECONDS = 2
-QUERY_SECONDS = 60  # two months of two queries each must fit in the Lambda's 5 minutes
+QUERY_SECONDS = 120  # per query; the untagged queries also stop short of the Lambda's own timeout (see _spare_seconds)
+NO_RESOURCE = "(no resource ID)"  # data transfer, support and similar items carry no resource ID
 UNTAGGED_LISTED = 25  # resources kept per month; the rest are counted and summed
 UNATTRIBUTED = "unattributed"
 ALERT_FRESH_DAYS = 3  # a hand-run backfill of old months must not email about them
@@ -40,12 +41,28 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         for date, item in days.items():
             dynamodb.put_item(TableName=os.environ["TABLE_NAME"], Item=_item(month, date, item))
         written[month] = len(days)
-        dynamodb.put_item(
-            TableName=os.environ["TABLE_NAME"], Item=_untagged_item(month, _untagged(_query(athena, _untagged_sql(month))))
-        )
         seen.update(days)
     sent = _notify(seen, dt.datetime.now(dt.UTC).date(), dynamodb)
+    # The untagged summary comes last and is isolated: a failure must not cost the day's alerts, but must still fail the run.
+    failed = []
+    for month in months:
+        try:
+            summary = _untagged(_query(athena, _untagged_sql(month), _spare_seconds(context)))
+            dynamodb.put_item(TableName=os.environ["TABLE_NAME"], Item=_untagged_item(month, summary))
+        except Exception as error:
+            print(f"Untagged summary for {month} failed: {error!r}")
+            failed.append(month)
+    if failed:
+        raise RuntimeError(f"The untagged summary failed for {', '.join(failed)}; costs and alerts were written")
     return {"written": written, "alerts": sent}
+
+
+def _spare_seconds(context: Any) -> int:
+    """How long the optional queries may run: the usual limit, or what the Lambda has left minus a margin for the write."""
+    left = getattr(context, "get_remaining_time_in_millis", lambda: QUERY_SECONDS * 1000 + 20_000)() // 1000 - 20
+    if left < 1:
+        raise TimeoutError("no time left in the Lambda for the untagged summary")
+    return min(QUERY_SECONDS, left)
 
 
 def _months(event: dict[str, Any], today: dt.date) -> list[str]:
@@ -175,7 +192,7 @@ def _untagged_sql(month: str) -> str:
 
 
 def _untagged(rows: list[dict[str, str]]) -> dict[str, Any]:
-    """The costliest untagged resources, with the rest counted and summed. An empty id means the item has no resource ID."""
+    """The costliest untagged resources, with the rest counted and summed. Items with no resource ID share one entry."""
     found: dict[str, dict[str, Decimal]] = {}
     for row in rows:
         cost = Decimal(row["cost"] or "0")
@@ -209,10 +226,11 @@ def _untagged_item(month: str, summary: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _query(athena: Any, sql: str) -> list[dict[str, str]]:
+def _query(athena: Any, sql: str, seconds: int | None = None) -> list[dict[str, str]]:
     """Runs one query in the cost-capped workgroup and returns its rows as dicts of strings."""
     run = athena.start_query_execution(QueryString=sql, WorkGroup=os.environ["ATHENA_WORKGROUP"])["QueryExecutionId"]
-    deadline = time.monotonic() + QUERY_SECONDS
+    limit = QUERY_SECONDS if seconds is None else seconds
+    deadline = time.monotonic() + limit
     while True:
         status = athena.get_query_execution(QueryExecutionId=run)["QueryExecution"]["Status"]
         if status["State"] == "SUCCEEDED":
@@ -221,7 +239,7 @@ def _query(athena: Any, sql: str) -> list[dict[str, str]]:
             raise RuntimeError(f"Athena query {status['State'].lower()}: {status.get('StateChangeReason', 'no reason given')}")
         if time.monotonic() > deadline:
             athena.stop_query_execution(QueryExecutionId=run)  # don't leave a billed query running past the Lambda
-            raise RuntimeError(f"Athena query still {status['State'].lower()} after {QUERY_SECONDS} seconds; cancelled")
+            raise RuntimeError(f"Athena query still {status['State'].lower()} after {limit} seconds; cancelled")
         time.sleep(POLL_SECONDS)
     rows: list[dict[str, str]] = []
     header: list[str] = []

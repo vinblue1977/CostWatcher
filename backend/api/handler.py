@@ -60,7 +60,15 @@ def _untagged(month: str, table: Any = None) -> dict[str, Any]:
         ConsistentRead=True,
     )
     item = page["Items"][0] if page["Items"] else {"resources": [], "otherCount": 0, "otherCost": 0}
-    return _json(200, {"month": month, **{k: item[k] for k in ("resources", "otherCount", "otherCost")}})
+    return _json(
+        200,
+        {
+            "month": month,
+            "resources": item.get("resources", []),
+            "otherCount": item.get("otherCount", 0),
+            "otherCost": item.get("otherCost", 0),
+        },
+    )
 
 
 def _json(status: int, body: dict[str, Any]) -> dict[str, Any]:

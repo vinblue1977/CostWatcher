@@ -322,15 +322,15 @@ def test_untagged_ranks_resources_and_counts_the_rest(monkeypatch: pytest.Monkey
     monkeypatch.setattr(ingest, "UNTAGGED_LISTED", 2)
     rows = [
         {"resource": "vol-1", "service": "AmazonEC2", "cost": "2"},
-        {"resource": "", "service": "AWSSupport", "cost": "1"},
-        {"resource": "", "service": "AmazonEC2", "cost": "2"},
-        {"resource": "", "service": "AmazonS3", "cost": "0.5"},
+        {"resource": ingest.NO_RESOURCE, "service": "AWSSupport", "cost": "1"},
+        {"resource": ingest.NO_RESOURCE, "service": "AmazonEC2", "cost": "2"},
+        {"resource": ingest.NO_RESOURCE, "service": "AmazonS3", "cost": "0.5"},
         {"resource": "fn", "service": "AWSLambda", "cost": "0.25"},
         {"resource": "log", "service": "AmazonCloudWatch", "cost": "0.1"},
     ]
     summary = ingest._untagged(rows)
     assert summary["resources"] == [
-        {"id": "", "service": "AmazonEC2, AWSSupport +1 more", "cost": Decimal("3.5")},
+        {"id": ingest.NO_RESOURCE, "service": "AmazonEC2, AWSSupport +1 more", "cost": Decimal("3.5")},
         {"id": "vol-1", "service": "AmazonEC2", "cost": Decimal(2)},
     ]
     assert summary["otherCount"] == 2 and summary["otherCost"] == Decimal("0.35")
@@ -350,3 +350,38 @@ def test_untagged_item_has_its_own_key_and_rounds_money() -> None:
     item = ingest._untagged_item("2026-10", summary)
     assert item["PK"] == {"S": "HYGIENE#2026-10"} and item["SK"] == {"S": "UNTAGGED"}
     assert item["resources"]["L"][0]["M"]["cost"] == {"N": "1.500000"} and item["otherCount"] == {"N": "4"}
+
+
+def test_a_failed_untagged_summary_still_sends_alerts_then_fails_the_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Athena(DailyAndUntaggedAthena):
+        def get_query_execution(self, **kwargs: Any) -> dict[str, Any]:
+            if "HAVING" in self.started[-1]["QueryString"]:
+                return {"QueryExecution": {"Status": {"State": "FAILED", "StateChangeReason": "boom"}}}
+            return super().get_query_execution(**kwargs)
+
+    puts: list[str] = []
+    notified: list[bool] = []
+
+    class Dynamo:
+        def put_item(self, **kwargs: Any) -> None:
+            puts.append(kwargs["Item"]["PK"]["S"])
+
+    monkeypatch.setattr(ingest, "_client", lambda name: Athena() if name == "athena" else Dynamo())
+    monkeypatch.setattr(ingest, "_notify", lambda *args: notified.append(True) or [])
+    with pytest.raises(RuntimeError, match="untagged summary failed for 2026-10"):
+        ingest.handler({"months": ["2026-10"]}, None)
+    assert puts == ["COST#2026-10"] and notified == [True]
+
+
+def test_untagged_queries_stop_before_the_lambda_does() -> None:
+    class Context:
+        def __init__(self, ms: int) -> None:
+            self.ms = ms
+
+        def get_remaining_time_in_millis(self) -> int:
+            return self.ms
+
+    assert ingest._spare_seconds(None) == 120 and ingest._spare_seconds(Context(300_000)) == 120
+    assert ingest._spare_seconds(Context(50_000)) == 30
+    with pytest.raises(TimeoutError):
+        ingest._spare_seconds(Context(15_000))
