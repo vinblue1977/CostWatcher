@@ -414,9 +414,10 @@ def test_api_stage_rows_get_the_project_tag_of_their_api(monkeypatch: pytest.Mon
     resources = [
         {"id": "/apis/4u2uhqbi7e/stages/$default", "service": "AmazonApiGateway", "cost": Decimal("0.001")},
         {"id": "vol-1", "service": "AmazonEC2", "cost": Decimal(2)},
+        {"id": "/apis/4u2uhqbi7e/stages/prod", "service": "AmazonApiGateway", "cost": Decimal("0.001")},
     ]
     ingest._name_projects(resources)
-    assert resources[0]["project"] == "portfolio-tracker" and "project" not in resources[1]
+    assert resources[0]["project"] == resources[2]["project"] == "portfolio-tracker" and "project" not in resources[1]
     item = ingest._untagged_item("2026-10", {"resources": resources, "otherCount": 0, "otherCost": Decimal(0)})
     assert item["resources"]["L"][0]["M"]["project"] == {"S": "portfolio-tracker"}
 
@@ -435,6 +436,13 @@ def test_a_failed_project_lookup_leaves_the_rows_alone(monkeypatch: pytest.Monke
     assert "project" not in resources[0]
     item = ingest._untagged_item("2026-10", {"resources": resources, "otherCount": 0, "otherCost": Decimal(0)})
     assert "project" not in item["resources"]["L"][0]["M"]
+
+
+def test_a_missing_region_does_not_fail_the_summary(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("AWS_REGION", raising=False)
+    resources = [{"id": "/apis/4u2uhqbi7e/stages/$default", "service": "AmazonApiGateway", "cost": Decimal("0.001")}]
+    ingest._name_projects(resources)
+    assert "project" not in resources[0]
 
 
 def test_no_tag_lookup_without_api_stage_rows(monkeypatch: pytest.MonkeyPatch) -> None:

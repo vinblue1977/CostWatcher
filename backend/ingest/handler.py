@@ -67,21 +67,21 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
 def _name_projects(resources: list[dict[str, Any]]) -> None:
     """Adds `project` to API stage rows from the API's current project tag; a failed lookup only leaves the rows as they were."""
-    arns = {}
-    for resource in resources:
-        match = API_STAGE.fullmatch(resource["id"])
-        if match:
-            arns[f"arn:aws:apigateway:{os.environ['AWS_REGION']}::/apis/{match[1]}"] = resource
-    if not arns:
-        return
     try:
+        rows: dict[str, list[dict[str, Any]]] = {}  # an API can have several stages, each its own row
+        for resource in resources:
+            match = API_STAGE.fullmatch(resource["id"])
+            if match:
+                rows.setdefault(f"arn:aws:apigateway:{os.environ['AWS_REGION']}::/apis/{match[1]}", []).append(resource)
+        if not rows:
+            return
         key = os.environ["PROJECT_TAG"].lower()
-        tagging = _client("resourcegroupstaggingapi")
-        found = tagging.get_resources(ResourceARNList=list(arns))["ResourceTagMappingList"]
+        found = _client("resourcegroupstaggingapi").get_resources(ResourceARNList=list(rows))["ResourceTagMappingList"]
         for entry in found:
             for tag in entry["Tags"]:
                 if tag["Key"].lower() == key and tag["Value"]:
-                    arns[entry["ResourceARN"]]["project"] = tag["Value"]
+                    for resource in rows[entry["ResourceARN"]]:
+                        resource["project"] = tag["Value"]
     except Exception as error:
         print(f"Project lookup failed: {error!r}")
 
