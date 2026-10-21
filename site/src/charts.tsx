@@ -25,6 +25,7 @@ export function Legend({ names }: { names: string[] }) {
 
 export function StackedBars({ data, bases }: { data: Stack; bases: Map<string, Baseline | null> }) {
   const max = Math.max(0.01, ...data.rows.map((r) => r.total));
+  const tallest = Math.max(0.01, ...data.rows.map((r) => r.parts.reduce((a, b) => a + b, 0))); // the scale: bars are the parts, not the total
   const first = data.rows[0];
   const last = data.rows.at(-1);
   const label = `Stacked bars of daily cost by group from ${first ? shortDate(first.date) : ""} to ${last ? shortDate(last.date) : ""}. Largest day ${money(max)}.`;
@@ -34,17 +35,18 @@ export function StackedBars({ data, bases }: { data: Stack; bases: Map<string, B
         {data.rows.map((row) => {
           const base = bases.get(row.date);
           const spike = base ? isSpike(row.total, base.usual) : false;
+          const stacked = row.parts.reduce((a, b) => a + b, 0); // credits fold into the total only, so the parts may not add up to it
           return (
             <div className="bar" key={row.date}>
               {spike && <span className="flag">{money(row.total)}</span>}
-              <div className="stack">
+              <div className="stack" style={{ height: `${(stacked / tallest) * 100}%` }}>
                 {row.parts.map((part, i) => {
                   const name = data.names[i] ?? OTHER;
                   return (
                     <div
                       key={name}
                       title={`${friendly(name)}: ${money(part)}`}
-                      style={{ height: `${(part / max) * 100}%`, background: color(data.names, name) }}
+                      style={{ flex: `${Math.max(part, 0)} 1 0`, minHeight: 0, background: color(data.names, name) }}
                     />
                   );
                 })}
