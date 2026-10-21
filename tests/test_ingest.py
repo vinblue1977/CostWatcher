@@ -142,6 +142,8 @@ class Marked:
     def __init__(self) -> None:
         self.keys: set[str] = set()
         self.deleted: list[dict[str, Any]] = []
+        self.queried: list[str] = []
+        self.stored: dict[str, list[dict[str, Any]]] = {}
 
     def put_item(self, **kwargs: Any) -> None:
         key = kwargs["Item"]["SK"]["S"]
@@ -150,6 +152,10 @@ class Marked:
             error.response = {"Error": {"Code": "ConditionalCheckFailedException"}}  # type: ignore[attr-defined]
             raise error
         self.keys.add(key)
+
+    def query(self, **kwargs: Any) -> dict[str, Any]:
+        self.queried.append(kwargs["ExpressionAttributeValues"][":pk"]["S"])
+        return {"Items": self.stored.get(self.queried[-1], [])}
 
     def delete_item(self, **kwargs: Any) -> None:
         self.deleted.append(kwargs["Key"])
@@ -194,5 +200,72 @@ def test_failed_publish_releases_the_marker_so_the_next_run_retries(monkeypatch:
 def test_old_data_never_alerts(monkeypatch: pytest.MonkeyPatch) -> None:
     sns = Sns()
     monkeypatch.setattr(ingest, "_client", lambda name: sns)
-    assert ingest._notify(_steady(), dt.date(2026, 10, 20), Marked()) == []
-    assert sns.published == []
+    dynamo = Marked()
+    assert ingest._notify(_steady(), dt.date(2026, 10, 20), dynamo) == []
+    assert sns.published == [] and dynamo.queried == []  # a stale export never reaches the history lookup
+
+
+def _stored(date: str, total: str) -> dict[str, Any]:
+    return {
+        "SK": {"S": f"DAY#{date}"},
+        "total": {"N": total},
+        "services": {"M": {"S": {"N": total}}},
+        "projects": {"M": {}},
+        "usageTypes": {"M": {"u": {"N": total}}},
+    }
+
+
+def test_early_month_alerts_use_last_months_stored_days(monkeypatch: pytest.MonkeyPatch) -> None:
+    sns, dynamo = Sns(), Marked()
+    monkeypatch.setattr(ingest, "_client", lambda name: sns)
+    dynamo.stored["COST#2026-09"] = [_stored(f"2026-09-{d}", "1") for d in range(24, 31)]
+    today = {"2026-10-01": {"total": Decimal("1"), "services": {"S": Decimal("1")}, "projects": {}, "usageTypes": {}}}
+    today["2026-10-02"] = {
+        "total": Decimal("5"),
+        "services": {"S": Decimal("5")},
+        "projects": {},
+        "usageTypes": {"u": Decimal("5")},
+    }
+    assert ingest._notify(today, dt.date(2026, 10, 3), dynamo) == ["spike#2026-10-02", "service-up#2026-10-02#S"]
+    assert dynamo.queried == ["COST#2026-09"]
+
+
+def test_a_full_baseline_skips_the_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+    dynamo = Marked()
+    monkeypatch.setattr(ingest, "_client", lambda name: Sns())
+    ingest._notify(_steady() | {"2026-10-08": _steady()["2026-10-01"]}, dt.date(2026, 10, 9), dynamo)
+    assert dynamo.queried == []
+
+
+def test_stored_days_are_the_newest_few_read_consistently() -> None:
+    class One:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, Any]] = []
+
+        def query(self, **kwargs: Any) -> dict[str, Any]:
+            self.calls.append(kwargs)
+            return {"Items": [_stored("2026-09-30", "3"), _stored("2026-09-29", "2")]}
+
+    dynamo = One()
+    days = ingest._stored_days(dynamo, "2026-09")
+    assert days["2026-09-29"]["total"] == Decimal(2) and days["2026-09-30"]["usageTypes"] == {"u": Decimal(3)}
+    assert dynamo.calls[0]["ScanIndexForward"] is False and dynamo.calls[0]["Limit"] == 7 and dynamo.calls[0]["ConsistentRead"]
+
+
+def test_a_failed_history_lookup_still_sends_the_alerts_in_hand(monkeypatch: pytest.MonkeyPatch) -> None:
+    sns, dynamo = Sns(), Marked()
+    monkeypatch.setattr(ingest, "_client", lambda name: sns)
+
+    def broken(**kwargs: Any) -> dict[str, Any]:
+        raise RuntimeError("AccessDenied")
+
+    dynamo.query = broken  # type: ignore[method-assign]
+    assert ingest._notify(_steady(), dt.date(2026, 10, 8), dynamo) == ["budget#2026-10"]
+
+
+def test_an_empty_previous_month_leaves_the_baseline_short(monkeypatch: pytest.MonkeyPatch) -> None:
+    sns, dynamo = Sns(), Marked()
+    monkeypatch.setattr(ingest, "_client", lambda name: sns)
+    day = {"total": Decimal("5"), "services": {"S": Decimal("5")}, "projects": {}, "usageTypes": {}}
+    assert ingest._notify({"2026-10-01": day, "2026-10-02": day}, dt.date(2026, 10, 3), dynamo) == []
+    assert dynamo.queried == ["COST#2026-09"]

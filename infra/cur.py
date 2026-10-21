@@ -158,8 +158,9 @@ class Cur(Construct):
             log_group=logs.LogGroup(self, "IngestLogs", retention=logs.RetentionDays.TWO_WEEKS),
         )
         fn.node.add_dependency(workgroup)
-        # The only writer; the API Lambda stays read-only. Alert markers are put once and deleted if the email fails.
-        table.grant(fn, "dynamodb:PutItem", "dynamodb:DeleteItem")
+        # The only writer; the API Lambda stays read-only. Alert markers are put once and deleted if the email fails;
+        # Query reads last month's stored days so early-month alerts have a full baseline.
+        table.grant(fn, "dynamodb:PutItem", "dynamodb:DeleteItem", "dynamodb:Query")
         topic.grant_publish(fn)  # pyright: ignore[reportArgumentType]
         bucket.grant_read(fn, f"{EXPORT_PREFIX}/*")
         bucket.grant_read_write(fn, "athena/*")

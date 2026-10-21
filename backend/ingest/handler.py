@@ -59,6 +59,10 @@ def _notify(days: dict[str, dict[str, Any]], today: dt.date, dynamodb: Any) -> l
         print(f"No alerts: the newest cost day is {max(days)}, so the export looks stale")
         return []
     month, sent = max(days)[:7], []  # a first-time service alerts once ever, so its marker is not per month
+    try:
+        days = _with_history(days, dynamodb)
+    except Exception as error:  # a short baseline only quiets the rules; it must not lose the alerts the run can still send
+        print(f"Alerting without last month's history: {error!r}")
     for alert in analysis.alerts(days, Decimal(os.environ["BUDGET_USD"])):
         marker = {
             "PK": {"S": "ALERT#global" if alert.key.startswith("new-service#") else f"ALERT#{month}"},
@@ -77,6 +81,38 @@ def _notify(days: dict[str, dict[str, Any]], today: dt.date, dynamodb: Any) -> l
             raise
         sent.append(alert.key)
     return sent
+
+
+def _with_history(days: dict[str, dict[str, Any]], dynamodb: Any) -> dict[str, dict[str, Any]]:
+    """Adds the last stored days of the month before the newest day's, when the alert baseline would otherwise be short.
+
+    Early in a month the run reads only this month, so the 7-day baseline would be thin; the previous month's items
+    are already in the table. Days read this run win over stored ones.
+    """
+    latest = max(days)
+    if sum(1 for d in days if d < latest) >= analysis.TRAILING_DAYS:
+        return days
+    previous = (dt.date.fromisoformat(latest).replace(day=1) - dt.timedelta(days=1)).strftime("%Y-%m")
+    return {**_stored_days(dynamodb, previous), **days}
+
+
+def _stored_days(dynamodb: Any, month: str) -> dict[str, dict[str, Any]]:
+    """The month's last baseline-sized run of days as the ingest wrote them, back in the shape `_days` builds."""
+    page = dynamodb.query(
+        TableName=os.environ["TABLE_NAME"],
+        KeyConditionExpression="PK = :pk AND begins_with(SK, :sk)",
+        ExpressionAttributeValues={":pk": {"S": f"COST#{month}"}, ":sk": {"S": "DAY#"}},
+        ScanIndexForward=False,  # newest first, so the limit keeps the days nearest this month
+        Limit=analysis.TRAILING_DAYS,
+        ConsistentRead=True,
+    )
+    return {
+        item["SK"]["S"].removeprefix("DAY#"): {
+            "total": Decimal(item["total"]["N"]),
+            **{g: {k: Decimal(v["N"]) for k, v in item[g]["M"].items()} for g in ("services", "projects", "usageTypes")},
+        }
+        for item in page["Items"]
+    }
 
 
 def _tag_column() -> str:
