@@ -72,6 +72,11 @@ describe("spikes", () => {
     const moved = drivers(found!.day.services, found!.base.services);
     expect(moved[0]).toMatchObject({ name: "AmazonVPC", delta: 8, cost: 8 });
   });
+  it("keeps unchanged keys that cost something, after the movers", () => {
+    const moved = drivers({ S3: 1, EC2: 50, Gone: 0 }, { S3: 2, EC2: 50, Gone: 0 });
+    expect(moved.map((m) => m.name)).toEqual(["S3", "EC2"]);
+    expect(moved[1]).toMatchObject({ delta: 0, cost: 50 });
+  });
 });
 
 describe("formatting", () => {
