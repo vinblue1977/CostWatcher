@@ -92,7 +92,9 @@ def _digest(dynamodb: Any, today: dt.date) -> bool:
     """Publishes the weekly summary of the stored days; skipped when the export looks stale."""
     month = today.strftime("%Y-%m")
     previous = (today.replace(day=1) - dt.timedelta(days=1)).strftime("%Y-%m")
-    days = {**_stored_days(dynamodb, previous, 2 * analysis.TRAILING_DAYS), **_stored_days(dynamodb, month, 31)}
+    days = _stored_days(dynamodb, month, 31)
+    if len(days) < 2 * analysis.TRAILING_DAYS:  # the prior week reaches into last month
+        days = {**_stored_days(dynamodb, previous, 2 * analysis.TRAILING_DAYS), **days}
     summary = analysis.digest(days, Decimal(os.environ["BUDGET_USD"]))
     if summary is None or (today - dt.date.fromisoformat(max(days))).days > ALERT_FRESH_DAYS:
         print("No digest: the stored days are missing or stale")

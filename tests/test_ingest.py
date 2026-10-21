@@ -277,8 +277,15 @@ def test_digest_publishes_the_weekly_summary(monkeypatch: pytest.MonkeyPatch) ->
     dynamo.stored["COST#2026-09"] = [_stored(f"2026-09-{d}", "1") for d in range(24, 31)]
     dynamo.stored["COST#2026-10"] = [_stored(f"2026-10-0{d}", "2") for d in range(1, 9)]
     assert ingest._digest(dynamo, dt.date(2026, 10, 9)) is True
-    assert sns.published[0]["Subject"] == "CostWatcher weekly: $14.00 over the last 7 days"
-    assert sns.published[0]["TopicArn"] == "arn:topic" and dynamo.queried == ["COST#2026-09", "COST#2026-10"]
+    assert sns.published[0]["Subject"] == "CostWatcher weekly: $14.00 over the 7 days to 2026-10-08"
+    assert sns.published[0]["TopicArn"] == "arn:topic" and dynamo.queried == ["COST#2026-10", "COST#2026-09"]
+
+
+def test_digest_skips_last_month_when_this_month_covers_two_weeks(monkeypatch: pytest.MonkeyPatch) -> None:
+    dynamo = Marked()
+    monkeypatch.setattr(ingest, "_client", lambda name: Sns())
+    dynamo.stored["COST#2026-10"] = [_stored(f"2026-10-{d:02d}", "2") for d in range(1, 16)]
+    assert ingest._digest(dynamo, dt.date(2026, 10, 16)) is True and dynamo.queried == ["COST#2026-10"]
 
 
 def test_digest_is_skipped_with_no_data_or_a_stale_export(monkeypatch: pytest.MonkeyPatch) -> None:

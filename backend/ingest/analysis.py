@@ -1,6 +1,7 @@
 """Cost analysis over the daily items the ingest builds: month-end forecast, spike drivers and alert rules. No AWS calls."""
 
 import calendar
+import datetime as dt
 import statistics
 from decimal import Decimal
 from typing import Any, NamedTuple
@@ -45,12 +46,16 @@ def drivers(current: dict[str, Decimal], baseline: dict[str, Decimal], limit: in
     return ranked[:limit]
 
 
-def _average(days: list[Day], group: str) -> dict[str, Decimal]:
+def _sum(days: list[Day], group: str) -> dict[str, Decimal]:
     totals: dict[str, Decimal] = {}
     for day in days:
         for key, cost in day[group].items():
             totals[key] = totals.get(key, Decimal(0)) + cost
-    return {key: cost / len(days) for key, cost in totals.items()}
+    return totals
+
+
+def _average(days: list[Day], group: str) -> dict[str, Decimal]:
+    return {key: cost / len(days) for key, cost in _sum(days, group).items()}
 
 
 def _describe(changes: list[tuple[str, Decimal]]) -> str:
@@ -117,14 +122,6 @@ def alerts(days: dict[str, Day], budget: Decimal) -> list[Alert]:
     return found
 
 
-def _sum(days: list[Day], group: str) -> dict[str, Decimal]:
-    totals: dict[str, Decimal] = {}
-    for day in days:
-        for key, cost in day[group].items():
-            totals[key] = totals.get(key, Decimal(0)) + cost
-    return totals
-
-
 def digest(days: dict[str, Day], budget: Decimal) -> tuple[str, str] | None:
     """The weekly email: the last 7 days against the 7 before, top services and movers, and the month's forecast.
 
@@ -132,30 +129,42 @@ def digest(days: dict[str, Day], budget: Decimal) -> tuple[str, str] | None:
     """
     if not days:
         return None
-    dates = sorted(days)
-    latest = dates[-1]
-    week = [days[d] for d in dates[-TRAILING_DAYS:]]
-    before = [days[d] for d in dates[-2 * TRAILING_DAYS : -TRAILING_DAYS]]
+    latest = max(days)
+    end = dt.date.fromisoformat(latest)
+
+    def window(last: dt.date) -> list[Day]:  # TRAILING_DAYS calendar days ending on `last`; gaps stay gaps
+        wanted = {(last - dt.timedelta(days=n)).isoformat() for n in range(TRAILING_DAYS)}
+        return [days[d] for d in sorted(wanted & days.keys())]
+
+    week, before = window(end), window(end - dt.timedelta(days=TRAILING_DAYS))
     spent = sum((d["total"] for d in week), Decimal(0))
-    subject = f"CostWatcher weekly: ${spent:.2f} over the last {len(week)} days"
-    lines = [f"{dates[-len(week)]} to {latest}: ${spent:.2f}."]
-    if len(before) == TRAILING_DAYS:
+    covered = "" if len(week) == TRAILING_DAYS else f" ({len(week)} of {TRAILING_DAYS} days have data)"
+    subject = f"CostWatcher weekly: ${spent:.2f} over the 7 days to {latest}"
+    lines = [f"{(end - dt.timedelta(days=TRAILING_DAYS - 1)).isoformat()} to {latest}: ${spent:.2f}{covered}."]
+    week_services = _sum(week, "services")
+    if len(week) == len(before) == TRAILING_DAYS:  # a comparison across gaps would mislead
         prior = sum((d["total"] for d in before), Decimal(0))
         change = spent - prior
         percent = f" ({change / prior:+.0%})" if prior else ""
-        lines.append(f"The 7 days before: ${prior:.2f}, so {'up' if change >= 0 else 'down'} ${abs(change):.2f}{percent}.")
-        moved = drivers(_sum(week, "services"), _sum(before, "services"))
+        lines.append(
+            f"The 7 days before: ${prior:.2f}, so "
+            + ("unchanged." if change == 0 else f"{'up' if change > 0 else 'down'} ${abs(change):.2f}{percent}.")
+        )
+        moved = drivers(week_services, _sum(before, "services"))
         if moved:
             lines.append(f"Biggest changes by service: {_describe(moved)}.")
-    top = sorted(_sum(week, "services").items(), key=lambda kc: (-kc[1], kc[0]))[:DRIVERS]
+    top = sorted(week_services.items(), key=lambda kc: (-kc[1], kc[0]))[:DRIVERS]
     if top:
         lines.append("Top services: " + ", ".join(f"{service} ${cost:.2f}" for service, cost in top) + ".")
     month = latest[:7]
-    projection = forecast({d: v for d, v in days.items() if d.startswith(month)}, month)
-    if projection:
+    month_days = {d: v for d, v in days.items() if d.startswith(month)}
+    projection = forecast(month_days, month)
+    if projection and len(month_days) >= TRAILING_DAYS:  # a day or two extrapolates wildly, as for the budget alert
         verdict = "over" if projection["projected"] > budget else "within"
         lines.append(
             f"{month} so far ${projection['spent']:.2f}; projected ${projection['projected']:.2f} "
             f"(range ${projection['low']:.2f} to ${projection['high']:.2f}), {verdict} the ${budget:.2f} budget."
         )
+    elif projection:
+        lines.append(f"{month} so far ${projection['spent']:.2f}; too early in the month to project.")
     return subject, "\n".join(lines)

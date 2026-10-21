@@ -100,7 +100,7 @@ def test_digest_compares_the_week_with_the_one_before_and_forecasts_the_month() 
     result = analysis.digest(days, D(50))
     assert result is not None
     subject, message = result
-    assert subject == "CostWatcher weekly: $21.00 over the last 7 days"
+    assert subject == "CostWatcher weekly: $21.00 over the 7 days to 2026-10-14"
     assert "2026-10-08 to 2026-10-14: $21.00." in message
     assert "The 7 days before: $7.00, so up $14.00 (+200%)." in message
     assert "Biggest changes by service: AmazonEC2 +$14.00." in message
@@ -112,6 +112,8 @@ def test_digest_with_less_than_two_weeks_skips_the_comparison() -> None:
     result = analysis.digest(week(), D(50))
     assert result is not None
     assert "The 7 days before" not in result[1] and "within the $50.00 budget" in result[1]
+    early = analysis.digest({"2026-10-01": day("1"), "2026-10-02": day("1")}, D(50))
+    assert early is not None and "too early in the month to project" in early[1] and "(2 of 7 days have data)" in early[1]
     assert analysis.digest({}, D(50)) is None
 
 
@@ -120,3 +122,11 @@ def test_digest_reports_a_drop_and_a_zero_prior_week() -> None:
     zero = {f"2026-10-{i:02d}": day("0" if i < 8 else "1", {"S": "1"}) for i in range(1, 15)}
     assert "down $7.00 (-50%)" in (analysis.digest(drop, D(99)) or ("", ""))[1]
     assert "so up $7.00." in (analysis.digest(zero, D(99)) or ("", ""))[1]
+
+
+def test_digest_windows_are_calendar_days_and_an_unchanged_week_says_so() -> None:
+    gappy = {f"2026-10-{i:02d}": day("1") for i in (1, 2, 3, 4, 5, 6, 7, 10, 11, 12, 13, 14)}  # 8 and 9 missing
+    result = analysis.digest(gappy, D(99))
+    assert result is not None and "(5 of 7 days have data)" in result[1] and "The 7 days before" not in result[1]
+    steady = analysis.digest({f"2026-10-{i:02d}": day("1") for i in range(1, 15)}, D(99))
+    assert steady is not None and "so unchanged." in steady[1]

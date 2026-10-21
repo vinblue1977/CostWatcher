@@ -204,7 +204,7 @@ class Cur(Construct):
             threshold=1,
             evaluation_periods=1,
             treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
-            alarm_description="The daily cost ingest failed",
+            alarm_description="The daily cost ingest or the weekly digest failed",
         ).add_alarm_action(cw_actions.SnsAction(topic))  # pyright: ignore[reportArgumentType]
 
         NagSuppressions.add_resource_suppressions(
