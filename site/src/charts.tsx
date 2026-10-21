@@ -14,7 +14,7 @@ export function Legend({ names, labelOf = friendly }: { names: string[]; labelOf
   return (
     <ul className="legend">
       {names.map((name) => (
-        <li key={name}>
+        <li key={name} title={labelOf(name) === name ? undefined : name}>
           <span className="swatch" style={{ background: color(names, name) }} />
           {labelOf(name)}
         </li>
@@ -71,7 +71,7 @@ export function RankedBars({ items, total, names, labelOf = friendly }: { items:
       {items.map(([name, cost]) => (
         <li key={name}>
           <span className="swatch" style={{ background: color(names, name) }} />
-          <span className="name">{labelOf(name)}</span>
+          <span className="name" title={labelOf(name) === name ? undefined : name}>{labelOf(name)}</span>
           <span className="track">
             <span className="fill" style={{ width: `${Math.max(0, (cost / top) * 100)}%`, background: color(names, name) }} />
           </span>

@@ -97,7 +97,7 @@ export function Spikes({ days }: { days: Day[] }) {
                     <tbody>
                       {usage.map((u) => (
                         <tr key={u.name}>
-                          <td>{usageLabel(u.name)}</td>
+                          <td title={u.name}>{usageLabel(u.name)}</td>
                           <td className="num">{signedMoney(u.delta)}</td>
                         </tr>
                       ))}

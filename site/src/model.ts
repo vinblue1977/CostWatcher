@@ -201,11 +201,18 @@ export function friendly(name: string): string {
   return name.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
 }
 
-const REGION_CODES: Record<string, string> = { USE1: "us-east-1", USE2: "us-east-2", USW1: "us-west-1", USW2: "us-west-2", EUW1: "eu-west-1", EUC1: "eu-central-1" };
+const REGION_CODES: Record<string, string> = {
+  USE1: "us-east-1", USE2: "us-east-2", USW1: "us-west-1", USW2: "us-west-2", CAN1: "ca-central-1", SAE1: "sa-east-1",
+  EUW1: "eu-west-1", EUW2: "eu-west-2", EUW3: "eu-west-3", EUC1: "eu-central-1", EUN1: "eu-north-1",
+  APS1: "ap-southeast-1", APS2: "ap-southeast-2", APN1: "ap-northeast-1", APN2: "ap-northeast-2", APS3: "ap-south-1",
+};
+const CODES = Object.keys(REGION_CODES).join("|");
+const PREFIXED = new RegExp(`^(${CODES})-(.+)$`);
+const HOP = new RegExp(`^(${CODES})-AWS-(In|Out)-Bytes$`); // traffic between two regions
 const HOME_REGION = "us-east-2";
 const USAGE_NAMES: Record<string, string> = {
-  "MP:USE2_InputTokenCount-Units": "Input tokens",
-  "MP:USE2_OutputTokenCount-Units": "Output tokens",
+  "InputTokenCount-Units": "Input tokens", // Bedrock, billed through the marketplace: MP:<region>_ is dropped first
+  "OutputTokenCount-Units": "Output tokens",
   "DataTransfer-Out-Bytes": "Data transfer out",
   "DataTransfer-In-Bytes": "Data transfer in",
   "DataTransfer-xAZ-Out-Bytes": "Data transfer between zones (out)",
@@ -233,15 +240,15 @@ const USAGE_NAMES: Record<string, string> = {
 
 /** "USE2-MP:USE2_InputTokenCount-Units" -> "Input tokens". Names outside the home region say which one; unknown names are tidied, never hidden. */
 export function usageLabel(name: string): string {
-  const prefixed = /^(USE1|USE2|USW1|USW2|EUW1|EUC1)-(.+)$/.exec(name);
+  const prefixed = PREFIXED.exec(name);
   const named = /^((?:us|eu|ap|ca|sa)-[a-z]+-\d)-(.+)$/.exec(name);
   const region = prefixed ? REGION_CODES[prefixed[1] ?? ""] : named?.[1];
-  const rest = (prefixed ?? named)?.[2] ?? name;
-  const hop = /^(USE1|USE2|USW1|USW2|EUW1|EUC1)-AWS-(In|Out)-Bytes$/.exec(rest); // traffic between two regions
+  const rest = ((prefixed ?? named)?.[2] ?? name).replace(/^MP:[A-Z0-9]+_/, "");
+  const hop = HOP.exec(rest);
   const label = hop
     ? `Data transfer ${hop[2] === "In" ? "from" : "to"} ${REGION_CODES[hop[1] ?? ""]}`
     : (USAGE_NAMES[rest] ??
-      friendly(rest.replace(/^MP:[A-Z0-9]+_/, "").replace(/[:-]+/g, " "))
+      friendly(rest.replace(/[:-]+/g, " "))
         .split(/\s+/)
         .filter(Boolean)
         .map((word, i) => (i === 0 || word === word.toUpperCase() ? word : word.toLowerCase())) // sentence case, acronyms kept
