@@ -201,6 +201,13 @@ export function friendly(name: string): string {
   return name.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
 }
 
+/** An ARN without its partition, service, region and account ("table/Orders"); other IDs pass through; no ID gets a label. */
+export function shortResource(id: string): string {
+  if (id === "" || id.startsWith("(")) return "(no resource ID)";
+  const parts = id.split(":");
+  return parts[0] === "arn" && parts.length > 5 && parts[5] ? parts.slice(5).join(":") : id;
+}
+
 export function money(value: number, digits = 2): string {
   const sign = value < 0 ? "-" : "";
   return `${sign}$${Math.abs(value).toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;

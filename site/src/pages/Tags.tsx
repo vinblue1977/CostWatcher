@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { SignedOut } from "../api";
-import { friendly, money, monthName, previousMonth, tagCoverage } from "../model";
+import { friendly, money, monthName, previousMonth, shortResource, tagCoverage } from "../model";
 import type { Day } from "../model";
 import type { Untagged } from "../api";
 import { Empty } from "./parts";
@@ -129,7 +129,7 @@ function Resources({ state, retry }: { state: Load; retry: () => void }) {
           <tbody>
             {resources.map((r, i) => (
               <tr key={`${i}|${r.id}`}>
-                <td className="mono">{r.id.startsWith("(") ? "No resource ID" : r.id}</td>
+                <td className="mono" title={r.id}>{shortResource(r.id)}</td>
                 <td>{friendly(r.service)}</td>
                 <td className="share-col">
                   <span className="track">
