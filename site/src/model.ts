@@ -207,6 +207,8 @@ const REGION_CODES: Record<string, string> = {
   APS1: "ap-southeast-1", APS2: "ap-southeast-2", APN1: "ap-northeast-1", APN2: "ap-northeast-2", APS3: "ap-south-1",
 };
 const CODES = Object.keys(REGION_CODES).join("|");
+const PREFIXED = new RegExp(`^(${CODES})-(.+)$`);
+const HOP = new RegExp(`^(${CODES})-AWS-(In|Out)-Bytes$`); // traffic between two regions
 const HOME_REGION = "us-east-2";
 const USAGE_NAMES: Record<string, string> = {
   "InputTokenCount-Units": "Input tokens", // Bedrock, billed through the marketplace: MP:<region>_ is dropped first
@@ -238,11 +240,11 @@ const USAGE_NAMES: Record<string, string> = {
 
 /** "USE2-MP:USE2_InputTokenCount-Units" -> "Input tokens". Names outside the home region say which one; unknown names are tidied, never hidden. */
 export function usageLabel(name: string): string {
-  const prefixed = new RegExp(`^(${CODES})-(.+)$`).exec(name);
+  const prefixed = PREFIXED.exec(name);
   const named = /^((?:us|eu|ap|ca|sa)-[a-z]+-\d)-(.+)$/.exec(name);
   const region = prefixed ? REGION_CODES[prefixed[1] ?? ""] : named?.[1];
   const rest = ((prefixed ?? named)?.[2] ?? name).replace(/^MP:[A-Z0-9]+_/, "");
-  const hop = new RegExp(`^(${CODES})-AWS-(In|Out)-Bytes$`).exec(rest); // traffic between two regions
+  const hop = HOP.exec(rest);
   const label = hop
     ? `Data transfer ${hop[2] === "In" ? "from" : "to"} ${REGION_CODES[hop[1] ?? ""]}`
     : (USAGE_NAMES[rest] ??
