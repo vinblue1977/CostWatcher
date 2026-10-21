@@ -276,7 +276,7 @@ def test_ingest_runs_daily_and_failures_email_the_alert_topic() -> None:
     template.has_resource_properties(
         "AWS::Events::Rule",
         {
-            "ScheduleExpression": "cron(0 9 ? * MON *)",
+            "ScheduleExpression": "cron(0 9 ? * SUN *)",
             "Targets": Match.array_with([Match.object_like({"Input": '{"digest":true}'})]),
         },
     )

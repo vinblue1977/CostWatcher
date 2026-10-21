@@ -190,11 +190,12 @@ class Cur(Construct):
             schedule=events.Schedule.cron(minute="30", hour="8"),
             targets=[targets.LambdaFunction(fn)],  # pyright: ignore[reportArgumentType]
         )
-        # Mondays, after the weekend's figures have landed: the same Lambda emails the weekly digest.
+        # Sunday mornings: the same Lambda emails the weekly digest. The newest day with data is then Saturday, and the email
+        # names the 7 days it covers.
         events.Rule(
             self,
             "Weekly",
-            schedule=events.Schedule.cron(minute="0", hour="9", week_day="MON"),
+            schedule=events.Schedule.cron(minute="0", hour="9", week_day="SUN"),
             targets=[targets.LambdaFunction(fn, event=events.RuleTargetInput.from_object({"digest": True}))],  # pyright: ignore[reportArgumentType]
         )
         # A failed run leaves the dashboard a day stale, so one failure emails the alert topic.
