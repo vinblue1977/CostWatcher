@@ -214,3 +214,30 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 export function shortDate(date: string): string {
   return `${MONTHS[Number(date.slice(5, 7)) - 1]} ${Number(date.slice(8))}`;
 }
+
+export interface Coverage {
+  month: string;
+  total: number;
+  tagged: number;
+  untagged: number;
+  pct: number; // share of the cost that carries a project tag
+}
+
+/** How much of a month's cost has a project tag, from the daily items. Null when the month has no days. */
+export function tagCoverage(days: Day[], month: string): Coverage | null {
+  const mine = days.filter((d) => d.date.startsWith(month));
+  if (mine.length === 0) return null;
+  const total = mine.reduce((sum, d) => sum + d.total, 0);
+  const untagged = Math.min(Math.max(sumGroup(mine, "projects")[UNATTRIBUTED] ?? 0, 0), Math.max(total, 0));
+  const tagged = total - untagged;
+  return { month, total, tagged, untagged, pct: total > 0 ? (tagged / total) * 100 : 100 };
+}
+
+export function previousMonth(month: string): string {
+  return new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 2, 1)).toISOString().slice(0, 7);
+}
+
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+export function monthName(month: string): string {
+  return `${MONTH_NAMES[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`;
+}

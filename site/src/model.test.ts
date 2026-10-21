@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { baseline, drivers, forecast, friendly, inRange, isSpike, latestSpike, money, movers, shiftDate, stack, weekOverWeek } from "./model";
+import { baseline, drivers, forecast, friendly, inRange, isSpike, latestSpike, money, monthName, movers, previousMonth, shiftDate, stack, tagCoverage, weekOverWeek } from "./model";
 import type { Day } from "./model";
 
 function day(date: string, total: number, services: Record<string, number> = { S3: total }, usageTypes: Record<string, number> = {}): Day {
@@ -94,5 +94,30 @@ describe("week over week", () => {
   });
   it("shows no movers on a thin earlier week", () => {
     expect(movers(steady(9))).toBeNull();
+  });
+});
+
+describe("tag coverage", () => {
+  const tagged = (date: string, total: number, untagged: number): Day => ({ ...day(date, total), projects: { web: total - untagged, unattributed: untagged } });
+  it("splits a month's cost into tagged and untagged, and ignores other months", () => {
+    const days = [tagged("2026-09-30", 100, 100), tagged("2026-10-01", 10, 3), tagged("2026-10-02", 10, 1)];
+    const result = tagCoverage(days, "2026-10");
+    expect(result).toMatchObject({ total: 20, untagged: 4, tagged: 16 });
+    expect(result?.pct).toBeCloseTo(80);
+  });
+  it("is null with no days and fully tagged when nothing was spent", () => {
+    expect(tagCoverage([], "2026-10")).toBeNull();
+    expect(tagCoverage([day("2026-10-01", 0)], "2026-10")?.pct).toBe(100);
+  });
+  it("never reports more untagged than the total (credits)", () => {
+    expect(tagCoverage([tagged("2026-10-01", 5, 9)], "2026-10")).toMatchObject({ untagged: 5, tagged: 0, pct: 0 });
+  });
+});
+
+describe("months", () => {
+  it("steps back across a year and names the month", () => {
+    expect(previousMonth("2026-10")).toBe("2026-09");
+    expect(previousMonth("2027-01")).toBe("2026-12");
+    expect(monthName("2026-10")).toBe("October 2026");
   });
 });
