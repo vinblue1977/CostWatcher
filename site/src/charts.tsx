@@ -10,20 +10,20 @@ export function color(names: string[], name: string): string {
   return PALETTE[names.filter((n) => n !== OTHER && n !== UNATTRIBUTED).indexOf(name)] ?? GREY; // grey past the fifth, never a repeat
 }
 
-export function Legend({ names }: { names: string[] }) {
+export function Legend({ names, labelOf = friendly }: { names: string[]; labelOf?: (name: string) => string }) {
   return (
     <ul className="legend">
       {names.map((name) => (
         <li key={name}>
           <span className="swatch" style={{ background: color(names, name) }} />
-          {friendly(name)}
+          {labelOf(name)}
         </li>
       ))}
     </ul>
   );
 }
 
-export function StackedBars({ data, bases }: { data: Stack; bases: Map<string, Baseline | null> }) {
+export function StackedBars({ data, bases, labelOf = friendly }: { data: Stack; bases: Map<string, Baseline | null>; labelOf?: (name: string) => string }) {
   const max = Math.max(0.01, ...data.rows.map((r) => r.total));
   const tallest = Math.max(0.01, ...data.rows.map((r) => r.parts.reduce((a, b) => a + b, 0))); // the scale: bars are the parts, not the total
   const first = data.rows[0];
@@ -45,7 +45,7 @@ export function StackedBars({ data, bases }: { data: Stack; bases: Map<string, B
                   return (
                     <div
                       key={name}
-                      title={`${friendly(name)}: ${money(part)}`}
+                      title={`${labelOf(name)}: ${money(part)}`}
                       style={{ flex: `${Math.max(part, 0)} 1 0`, minHeight: 0, background: color(data.names, name) }}
                     />
                   );
@@ -64,14 +64,14 @@ export function StackedBars({ data, bases }: { data: Stack; bases: Map<string, B
   );
 }
 
-export function RankedBars({ items, total, names }: { items: [string, number][]; total: number; names: string[] }) {
+export function RankedBars({ items, total, names, labelOf = friendly }: { items: [string, number][]; total: number; names: string[]; labelOf?: (name: string) => string }) {
   const top = Math.max(0.01, ...items.map(([, cost]) => cost));
   return (
     <ul className="ranked">
       {items.map(([name, cost]) => (
         <li key={name}>
           <span className="swatch" style={{ background: color(names, name) }} />
-          <span className="name">{friendly(name)}</span>
+          <span className="name">{labelOf(name)}</span>
           <span className="track">
             <span className="fill" style={{ width: `${Math.max(0, (cost / top) * 100)}%`, background: color(names, name) }} />
           </span>

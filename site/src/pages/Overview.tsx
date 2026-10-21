@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Legend, StackedBars } from "../charts";
-import { baseline, drivers, forecast, friendly, inRange, latestSpike, money, movers, shortDate, signedMoney, stack, sumGroup, weekOverWeek } from "../model";
+import { baseline, drivers, forecast, friendly, inRange, latestSpike, money, movers, shortDate, signedMoney, stack, sumGroup, usageLabel, weekOverWeek } from "../model";
 import type { Baseline, Day, Group, Range } from "../model";
 import { Empty, Note } from "./parts";
 
@@ -18,6 +18,7 @@ export function Overview({ days, range, budget }: { days: Day[]; range: Range; b
   const fc = useMemo(() => forecast(days), [days]);
   const spike = useMemo(() => latestSpike(days), [days]);
   const moved = useMemo(() => movers(days, group), [days, group]);
+  const labelOf = group === "usageTypes" ? usageLabel : friendly;
   if (days.length === 0) return <Empty />;
 
   const latest = days.at(-1);
@@ -98,8 +99,8 @@ export function Overview({ days, range, budget }: { days: Day[]; range: Range; b
             </select>
           </label>
         </div>
-        <Legend names={data.names} />
-        <StackedBars data={data} bases={bases} />
+        <Legend names={data.names} labelOf={labelOf} />
+        <StackedBars data={data} bases={bases} labelOf={labelOf} />
       </section>
 
       <div className="two">
@@ -114,7 +115,7 @@ export function Overview({ days, range, budget }: { days: Day[]; range: Range; b
             <ul className="movers">
               {moved.map((m) => (
                 <li key={m.name}>
-                  <span className="name">{friendly(m.name)}</span>
+                  <span className="name">{labelOf(m.name)}</span>
                   <span className="amount">{signedMoney(m.delta)}</span>
                   <span className="share">{m.pct === null ? "new" : `${m.pct > 0 ? "+" : ""}${m.pct.toFixed(0)}%`}</span>
                 </li>
