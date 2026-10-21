@@ -206,7 +206,8 @@ export function shortResource(id: string): string {
   if (id === "" || id.startsWith("(")) return "(no resource ID)";
   const parts = id.split(":");
   if (parts[0] !== "arn" || parts.length <= 5 || !parts[5]) return id;
-  return parts.slice(5).join(":").replace(/^(inference-profile|table)\//, "");
+  const resource = parts.slice(5).join(":");
+  return resource.replace(/^(inference-profile|table)\//, "") || resource; // never an empty name
 }
 
 export function money(value: number, digits = 2): string {
