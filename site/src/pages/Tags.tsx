@@ -129,7 +129,7 @@ function Resources({ state, retry }: { state: Load; retry: () => void }) {
           <tbody>
             {resources.map((r, i) => (
               <tr key={`${i}|${r.id}`}>
-                <td className="mono" title={r.id}>{shortResource(r.id)}</td>
+                <td className="mono" title={r.id || undefined}>{shortResource(r.id)}</td>
                 <td>{friendly(r.service)}</td>
                 <td className="share-col">
                   <span className="track">

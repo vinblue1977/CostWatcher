@@ -131,6 +131,8 @@ describe("shortResource", () => {
   it("leaves other IDs alone and labels a missing one", () => {
     expect(shortResource("cdk-hnb659fds-assets-235316001927-us-east-2")).toBe("cdk-hnb659fds-assets-235316001927-us-east-2");
     expect(shortResource("arn:aws:s3:::my-bucket")).toBe("my-bucket"); // S3 ARNs have no region or account
+    expect(shortResource("arn:aws:s3:::")).toBe("arn:aws:s3:::"); // nothing after the account part: keep it whole
+    expect(shortResource("arn:aws:iam")).toBe("arn:aws:iam");
     expect(shortResource("")).toBe("(no resource ID)");
     expect(shortResource("(no resource ID)")).toBe("(no resource ID)");
   });
