@@ -92,3 +92,31 @@ def test_budget_alert_fires_when_the_projection_passes_it() -> None:
 
 def test_budget_alert_waits_for_a_week_of_data() -> None:
     assert analysis.alerts({"2026-10-02": day("50")}, D(5)) == []
+
+
+def test_digest_compares_the_week_with_the_one_before_and_forecasts_the_month() -> None:
+    days = {f"2026-10-{i:02d}": day("1", {"AmazonS3": "1"}) for i in range(1, 8)}
+    days |= {f"2026-10-{i:02d}": day("3", {"AmazonS3": "1", "AmazonEC2": "2"}) for i in range(8, 15)}
+    result = analysis.digest(days, D(50))
+    assert result is not None
+    subject, message = result
+    assert subject == "CostWatcher weekly: $21.00 over the last 7 days"
+    assert "2026-10-08 to 2026-10-14: $21.00." in message
+    assert "The 7 days before: $7.00, so up $14.00 (+200%)." in message
+    assert "Biggest changes by service: AmazonEC2 +$14.00." in message
+    assert "Top services: AmazonEC2 $14.00, AmazonS3 $7.00." in message
+    assert "2026-10 so far $28.00; projected $62.00" in message and "over the $50.00 budget" in message
+
+
+def test_digest_with_less_than_two_weeks_skips_the_comparison() -> None:
+    result = analysis.digest(week(), D(50))
+    assert result is not None
+    assert "The 7 days before" not in result[1] and "within the $50.00 budget" in result[1]
+    assert analysis.digest({}, D(50)) is None
+
+
+def test_digest_reports_a_drop_and_a_zero_prior_week() -> None:
+    drop = {f"2026-10-{i:02d}": day("2" if i < 8 else "1", {"S": "1"}) for i in range(1, 15)}
+    zero = {f"2026-10-{i:02d}": day("0" if i < 8 else "1", {"S": "1"}) for i in range(1, 15)}
+    assert "down $7.00 (-50%)" in (analysis.digest(drop, D(99)) or ("", ""))[1]
+    assert "so up $7.00." in (analysis.digest(zero, D(99)) or ("", ""))[1]

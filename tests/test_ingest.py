@@ -269,3 +269,28 @@ def test_an_empty_previous_month_leaves_the_baseline_short(monkeypatch: pytest.M
     day = {"total": Decimal("5"), "services": {"S": Decimal("5")}, "projects": {}, "usageTypes": {}}
     assert ingest._notify({"2026-10-01": day, "2026-10-02": day}, dt.date(2026, 10, 3), dynamo) == []
     assert dynamo.queried == ["COST#2026-09"]
+
+
+def test_digest_publishes_the_weekly_summary(monkeypatch: pytest.MonkeyPatch) -> None:
+    sns, dynamo = Sns(), Marked()
+    monkeypatch.setattr(ingest, "_client", lambda name: sns)
+    dynamo.stored["COST#2026-09"] = [_stored(f"2026-09-{d}", "1") for d in range(24, 31)]
+    dynamo.stored["COST#2026-10"] = [_stored(f"2026-10-0{d}", "2") for d in range(1, 9)]
+    assert ingest._digest(dynamo, dt.date(2026, 10, 9)) is True
+    assert sns.published[0]["Subject"] == "CostWatcher weekly: $14.00 over the last 7 days"
+    assert sns.published[0]["TopicArn"] == "arn:topic" and dynamo.queried == ["COST#2026-09", "COST#2026-10"]
+
+
+def test_digest_is_skipped_with_no_data_or_a_stale_export(monkeypatch: pytest.MonkeyPatch) -> None:
+    sns, dynamo = Sns(), Marked()
+    monkeypatch.setattr(ingest, "_client", lambda name: sns)
+    assert ingest._digest(dynamo, dt.date(2026, 10, 9)) is False
+    dynamo.stored["COST#2026-10"] = [_stored("2026-10-01", "2")]
+    assert ingest._digest(dynamo, dt.date(2026, 10, 20)) is False
+    assert sns.published == []
+
+
+def test_the_digest_event_skips_the_athena_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ingest, "_client", lambda name: object())
+    monkeypatch.setattr(ingest, "_digest", lambda client, today: True)
+    assert ingest.handler({"digest": True}, None) == {"digest": True}

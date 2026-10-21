@@ -115,3 +115,47 @@ def alerts(days: dict[str, Day], budget: Decimal) -> list[Alert]:
                 )
             )
     return found
+
+
+def _sum(days: list[Day], group: str) -> dict[str, Decimal]:
+    totals: dict[str, Decimal] = {}
+    for day in days:
+        for key, cost in day[group].items():
+            totals[key] = totals.get(key, Decimal(0)) + cost
+    return totals
+
+
+def digest(days: dict[str, Day], budget: Decimal) -> tuple[str, str] | None:
+    """The weekly email: the last 7 days against the 7 before, top services and movers, and the month's forecast.
+
+    `days` holds this month and the end of the last, keyed by date. Returns (subject, message), or None with no days.
+    """
+    if not days:
+        return None
+    dates = sorted(days)
+    latest = dates[-1]
+    week = [days[d] for d in dates[-TRAILING_DAYS:]]
+    before = [days[d] for d in dates[-2 * TRAILING_DAYS : -TRAILING_DAYS]]
+    spent = sum((d["total"] for d in week), Decimal(0))
+    subject = f"CostWatcher weekly: ${spent:.2f} over the last {len(week)} days"
+    lines = [f"{dates[-len(week)]} to {latest}: ${spent:.2f}."]
+    if len(before) == TRAILING_DAYS:
+        prior = sum((d["total"] for d in before), Decimal(0))
+        change = spent - prior
+        percent = f" ({change / prior:+.0%})" if prior else ""
+        lines.append(f"The 7 days before: ${prior:.2f}, so {'up' if change >= 0 else 'down'} ${abs(change):.2f}{percent}.")
+        moved = drivers(_sum(week, "services"), _sum(before, "services"))
+        if moved:
+            lines.append(f"Biggest changes by service: {_describe(moved)}.")
+    top = sorted(_sum(week, "services").items(), key=lambda kc: (-kc[1], kc[0]))[:DRIVERS]
+    if top:
+        lines.append("Top services: " + ", ".join(f"{service} ${cost:.2f}" for service, cost in top) + ".")
+    month = latest[:7]
+    projection = forecast({d: v for d, v in days.items() if d.startswith(month)}, month)
+    if projection:
+        verdict = "over" if projection["projected"] > budget else "within"
+        lines.append(
+            f"{month} so far ${projection['spent']:.2f}; projected ${projection['projected']:.2f} "
+            f"(range ${projection['low']:.2f} to ${projection['high']:.2f}), {verdict} the ${budget:.2f} budget."
+        )
+    return subject, "\n".join(lines)
