@@ -201,11 +201,13 @@ export function friendly(name: string): string {
   return name.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
 }
 
-/** An ARN without its partition, service, region and account ("table/Orders"); other IDs pass through; no ID gets a label. */
+/** An ARN without its partition, service, region and account, and without a "table/" or "inference-profile/" type prefix ("Orders"); other IDs pass through; no ID gets a label. */
 export function shortResource(id: string): string {
   if (id === "" || id.startsWith("(")) return "(no resource ID)";
   const parts = id.split(":");
-  return parts[0] === "arn" && parts.length > 5 && parts[5] ? parts.slice(5).join(":") : id;
+  if (parts[0] !== "arn" || parts.length <= 5 || !parts[5]) return id;
+  const resource = parts.slice(5).join(":");
+  return resource.replace(/^(inference-profile|table)\//, "") || resource; // never an empty name
 }
 
 export function money(value: number, digits = 2): string {

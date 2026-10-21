@@ -124,8 +124,9 @@ describe("months", () => {
 
 describe("shortResource", () => {
   it("drops the partition, service, region and account from an ARN", () => {
-    expect(shortResource("arn:aws:dynamodb:us-east-2:235316001927:table/Orders")).toBe("table/Orders");
-    expect(shortResource("arn:aws:bedrock:us-east-2:235316001927:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0")).toBe("inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0");
+    expect(shortResource("arn:aws:dynamodb:us-east-2:235316001927:table/Orders")).toBe("Orders");
+    expect(shortResource("arn:aws:bedrock:us-east-2:235316001927:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0")).toBe("us.anthropic.claude-haiku-4-5-20251001-v1:0");
+    expect(shortResource("arn:aws:ec2:us-east-2:235316001927:snapshot/snap-0b83668ed568ac9b3")).toBe("snapshot/snap-0b83668ed568ac9b3"); // only table/ and inference-profile/ are dropped
     expect(shortResource("arn:aws:secretsmanager:us-east-2:235316001927:secret:google/secrets-CX4YJR")).toBe("secret:google/secrets-CX4YJR");
   });
   it("leaves other IDs alone and labels a missing one", () => {
@@ -133,6 +134,7 @@ describe("shortResource", () => {
     expect(shortResource("arn:aws:s3:::my-bucket")).toBe("my-bucket"); // S3 ARNs have no region or account
     expect(shortResource("arn:aws:s3:::")).toBe("arn:aws:s3:::"); // nothing after the account part: keep it whole
     expect(shortResource("arn:aws:iam")).toBe("arn:aws:iam");
+    expect(shortResource("arn:aws:dynamodb:us-east-2:235316001927:table/")).toBe("table/"); // never an empty name
     expect(shortResource("")).toBe("(no resource ID)");
     expect(shortResource("(no resource ID)")).toBe("(no resource ID)");
   });
