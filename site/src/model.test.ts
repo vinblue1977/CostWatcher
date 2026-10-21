@@ -130,8 +130,8 @@ describe("shortResource", () => {
     expect(shortResource("arn:aws:secretsmanager:us-east-2:235316001927:secret:google/secrets-CX4YJR")).toBe("secret:google/secrets-CX4YJR");
   });
   it("names an API stage by its project, and leaves it alone without one", () => {
-    expect(shortResource("/apis/4u2uhqbi7e/stages/$default", "portfolio-tracker")).toBe("portfolio-tracker API");
-    expect(shortResource("/apis/4u2uhqbi7e/stages/$default")).toBe("/apis/4u2uhqbi7e/stages/$default");
+    expect(shortResource("arn:aws:apigateway:us-east-2::/apis/4u2uhqbi7e/stages/$default", "portfolio-tracker")).toBe("portfolio-tracker API");
+    expect(shortResource("arn:aws:apigateway:us-east-2::/apis/4u2uhqbi7e/stages/$default")).toBe("/apis/4u2uhqbi7e/stages/$default"); // the ARN, shortened
     expect(shortResource("vol-1", "portfolio-tracker")).toBe("vol-1"); // only API stages are renamed
   });
   it("leaves other IDs alone and labels a missing one", () => {

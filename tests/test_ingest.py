@@ -400,6 +400,10 @@ def test_names_with_quotes_are_escaped_in_the_service_expression(monkeypatch: py
     assert "WHEN 'x''y' THEN 'Sonnet''s'" in ingest._service_sql()
 
 
+STAGE = "arn:aws:apigateway:us-east-2::/apis/4u2uhqbi7e/stages/$default"  # as the export names an HTTP API stage
+STAGE_PROD = "arn:aws:apigateway:us-east-2::/apis/4u2uhqbi7e/stages/prod"
+
+
 def test_api_stage_rows_get_the_project_tag_of_their_api(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AWS_REGION", "us-east-2")
     monkeypatch.setenv("PROJECT_TAG", "project")
@@ -412,14 +416,34 @@ def test_api_stage_rows_get_the_project_tag_of_their_api(monkeypatch: pytest.Mon
 
     monkeypatch.setattr(ingest, "_client", lambda name: Tagging())
     resources = [
-        {"id": "/apis/4u2uhqbi7e/stages/$default", "service": "AmazonApiGateway", "cost": Decimal("0.001")},
+        {"id": STAGE, "service": "AmazonApiGateway", "cost": Decimal("0.001")},
         {"id": "vol-1", "service": "AmazonEC2", "cost": Decimal(2)},
-        {"id": "/apis/4u2uhqbi7e/stages/prod", "service": "AmazonApiGateway", "cost": Decimal("0.001")},
+        {"id": STAGE_PROD, "service": "AmazonApiGateway", "cost": Decimal("0.001")},
     ]
     ingest._name_projects(resources)
     assert resources[0]["project"] == resources[2]["project"] == "portfolio-tracker" and "project" not in resources[1]
     item = ingest._untagged_item("2026-10", {"resources": resources, "otherCount": 0, "otherCost": Decimal(0)})
     assert item["resources"]["L"][0]["M"]["project"] == {"S": "portfolio-tracker"}
+
+
+def test_stages_from_other_regions_and_bare_ids_are_handled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AWS_REGION", "us-east-2")
+    monkeypatch.setenv("PROJECT_TAG", "project")
+    asked: list[list[str]] = []
+
+    class Tagging:
+        def get_resources(self, **kwargs: Any) -> dict[str, Any]:
+            asked.append(kwargs["ResourceARNList"])
+            tags = [{"Key": "project", "Value": "tennis-tracker"}]
+            arn = "arn:aws:apigateway:us-east-2::/apis/bare1"
+            return {"ResourceTagMappingList": [{"ResourceARN": arn, "Tags": tags}]}
+
+    monkeypatch.setattr(ingest, "_client", lambda name: Tagging())
+    elsewhere = {"id": "arn:aws:apigateway:us-west-2::/apis/far1/stages/x", "service": "AmazonApiGateway", "cost": Decimal(1)}
+    bare = {"id": "/apis/bare1/stages/x", "service": "AmazonApiGateway", "cost": Decimal(1)}
+    ingest._name_projects([elsewhere, bare])
+    assert asked == [["arn:aws:apigateway:us-east-2::/apis/bare1"]]  # the other region's stage is not asked about
+    assert "project" not in elsewhere and bare["project"] == "tennis-tracker"
 
 
 def test_a_failed_project_lookup_leaves_the_rows_alone(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -431,7 +455,7 @@ def test_a_failed_project_lookup_leaves_the_rows_alone(monkeypatch: pytest.Monke
             raise RuntimeError("AccessDenied")
 
     monkeypatch.setattr(ingest, "_client", lambda name: Tagging())
-    resources = [{"id": "/apis/4u2uhqbi7e/stages/$default", "service": "AmazonApiGateway", "cost": Decimal("0.001")}]
+    resources = [{"id": STAGE, "service": "AmazonApiGateway", "cost": Decimal("0.001")}]
     ingest._name_projects(resources)
     assert "project" not in resources[0]
     item = ingest._untagged_item("2026-10", {"resources": resources, "otherCount": 0, "otherCost": Decimal(0)})
