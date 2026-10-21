@@ -162,6 +162,7 @@ td .track { display: block; }
   .select select { font-size: 16px; }
   .ranked li, .movers li { gap: 8px 10px; flex-wrap: wrap; }
   .track { flex: 1 1 100%; order: 5; }
+  .ranked .cols .track { display: none; }
   .plot { height: 160px; gap: 3px; padding-top: 22px; }
   .axis { gap: 3px; }
   .bar .flag { font-size: 10px; padding: 1px 5px; }
