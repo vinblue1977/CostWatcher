@@ -161,10 +161,21 @@ def test_only_extensionless_paths_fall_back_to_the_app() -> None:
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node runs the CloudFront Function")
 def test_fallback_function_rewrites_by_extension() -> None:
-    script = SPA_FALLBACK + "for (const u of process.argv.slice(1)) console.log(handler({request: {uri: u}}).uri);"
-    uris = ["/", "/overview", "/config.json", "/assets/index-abc123.js", "/assets/v1.2/app", "/favicon.ico"]
-    out = subprocess.run(["node", "-e", script, "--", *uris], capture_output=True, text=True, check=True).stdout  # noqa: S603, S607
-    assert out.split() == ["/index.html", "/index.html", "/config.json", "/assets/index-abc123.js", "/index.html", "/favicon.ico"]
+    uris = ["/", "/overview", "/config.json", "/assets/index-abc123.js", "/assets/v1.2/app", "/favicon.ico", "/.well-known/x"]
+    script = (
+        SPA_FALLBACK
+        + f"for (const u of {json.dumps(uris)}) console.log(handler({{request: {{uri: u, querystring: {{}}}}}}).uri);"
+    )
+    out = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True).stdout  # noqa: S603, S607
+    assert out.split() == [
+        "/index.html",
+        "/index.html",
+        "/config.json",
+        "/assets/index-abc123.js",
+        "/index.html",
+        "/favicon.ico",
+        "/index.html",
+    ]
 
 
 def test_localhost_is_allowed_only_when_asked() -> None:
