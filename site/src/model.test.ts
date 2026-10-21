@@ -149,6 +149,11 @@ describe("usageLabel", () => {
   it("names Bedrock tokens and drops the home region prefix", () => {
     expect(usageLabel("USE2-MP:USE2_InputTokenCount-Units")).toBe("Input tokens");
     expect(usageLabel("USE2-MP:USE2_OutputTokenCount-Units")).toBe("Output tokens");
+    expect(usageLabel("USE1-MP:USE1_InputTokenCount-Units")).toBe("Input tokens (us-east-1)"); // any region
+    expect(usageLabel("APS1-DataTransfer-Out-Bytes")).toBe("Data transfer out (ap-southeast-1)");
+    expect(usageLabel("EUW1-APS1-AWS-Out-Bytes")).toBe("Data transfer to ap-southeast-1 (eu-west-1)");
+    expect(usageLabel("Other")).toBe("Other");
+    expect(usageLabel("unattributed")).toBe("Unattributed");
     expect(usageLabel("USE2-Lambda-GB-Second-ARM")).toBe("Lambda compute (ARM)");
     expect(usageLabel("USE2-DataTransfer-Out-Bytes")).toBe("Data transfer out");
   });
