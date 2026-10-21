@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { baseline, drivers, friendly, inRange, isSpike, latestSpike, money, shortDate, signedMoney } from "../model";
+import { baseline, drivers, friendly, inRange, isSpike, latestSpike, money, shortDate, signedMoney, usageLabel } from "../model";
 import type { Day } from "../model";
 import { Empty } from "./parts";
 
@@ -97,7 +97,7 @@ export function Spikes({ days }: { days: Day[] }) {
                     <tbody>
                       {usage.map((u) => (
                         <tr key={u.name}>
-                          <td>{u.name}</td>
+                          <td>{usageLabel(u.name)}</td>
                           <td className="num">{signedMoney(u.delta)}</td>
                         </tr>
                       ))}

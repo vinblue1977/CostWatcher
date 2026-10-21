@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { baseline, drivers, forecast, friendly, inRange, isSpike, latestSpike, money, monthName, movers, previousMonth, shiftDate, shortResource, stack, tagCoverage, weekOverWeek } from "./model";
+import { baseline, drivers, forecast, friendly, inRange, isSpike, latestSpike, money, monthName, movers, previousMonth, shiftDate, shortResource, usageLabel, stack, tagCoverage, weekOverWeek } from "./model";
 import type { Day } from "./model";
 
 function day(date: string, total: number, services: Record<string, number> = { S3: total }, usageTypes: Record<string, number> = {}): Day {
@@ -142,5 +142,29 @@ describe("shortResource", () => {
     expect(shortResource("arn:aws:dynamodb:us-east-2:235316001927:table/")).toBe("table/"); // never an empty name
     expect(shortResource("")).toBe("(no resource ID)");
     expect(shortResource("(no resource ID)")).toBe("(no resource ID)");
+  });
+});
+
+describe("usageLabel", () => {
+  it("names Bedrock tokens and drops the home region prefix", () => {
+    expect(usageLabel("USE2-MP:USE2_InputTokenCount-Units")).toBe("Input tokens");
+    expect(usageLabel("USE2-MP:USE2_OutputTokenCount-Units")).toBe("Output tokens");
+    expect(usageLabel("USE2-Lambda-GB-Second-ARM")).toBe("Lambda compute (ARM)");
+    expect(usageLabel("USE2-DataTransfer-Out-Bytes")).toBe("Data transfer out");
+  });
+  it("says which region when it is not the home one", () => {
+    expect(usageLabel("USE1-APIRequest")).toBe("API requests (us-east-1)");
+    expect(usageLabel("us-east-1-KMS-Requests")).toBe("KMS requests (us-east-1)");
+    expect(usageLabel("us-east-2-KMS-Requests")).toBe("KMS requests");
+    expect(usageLabel("USE2-USE1-AWS-Out-Bytes")).toBe("Data transfer to us-east-1");
+    expect(usageLabel("USE2-USW1-AWS-In-Bytes")).toBe("Data transfer from us-west-1");
+    expect(usageLabel("USW2-USE2-AWS-Out-Bytes")).toBe("Data transfer to us-east-2 (us-west-2)");
+  });
+  it("tidies names it does not know and never returns an empty label", () => {
+    expect(usageLabel("USE2-WriteRequestUnits")).toBe("Write request units");
+    expect(usageLabel("USE2-CW:GMD-Metrics")).toBe("CW GMD metrics");
+    expect(usageLabel("Requests-Tier1")).toBe("Requests tier1");
+    expect(usageLabel("USE2-")).not.toBe("");
+    expect(usageLabel("")).toBe("");
   });
 });

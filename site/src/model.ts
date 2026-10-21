@@ -201,6 +201,55 @@ export function friendly(name: string): string {
   return name.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
 }
 
+const REGION_CODES: Record<string, string> = { USE1: "us-east-1", USE2: "us-east-2", USW1: "us-west-1", USW2: "us-west-2", EUW1: "eu-west-1", EUC1: "eu-central-1" };
+const HOME_REGION = "us-east-2";
+const USAGE_NAMES: Record<string, string> = {
+  "MP:USE2_InputTokenCount-Units": "Input tokens",
+  "MP:USE2_OutputTokenCount-Units": "Output tokens",
+  "DataTransfer-Out-Bytes": "Data transfer out",
+  "DataTransfer-In-Bytes": "Data transfer in",
+  "DataTransfer-xAZ-Out-Bytes": "Data transfer between zones (out)",
+  "DataTransfer-xAZ-In-Bytes": "Data transfer between zones (in)",
+  "CloudFront-Out-Bytes": "CloudFront data out",
+  "CloudFront-In-Bytes": "CloudFront data in",
+  "Lambda-GB-Second": "Lambda compute",
+  "Lambda-GB-Second-ARM": "Lambda compute (ARM)",
+  Request: "Lambda requests",
+  "Request-ARM": "Lambda requests (ARM)",
+  "TimedStorage-ByteHrs": "Storage",
+  "TimedPITRStorage-ByteHrs": "Point-in-time recovery storage",
+  "EBS:SnapshotArchiveStorage": "EBS snapshot archive storage",
+  ApiGatewayHttpRequest: "API Gateway HTTP requests",
+  "AWSSecretsManager-Secrets": "Secrets Manager secrets",
+  AWSSecretsManagerAPIRequest: "Secrets Manager API requests",
+  APIRequest: "API requests",
+  "KMS-Requests": "KMS requests",
+  StateTransition: "State transitions",
+  "XRay-TracesStored": "X-Ray traces stored",
+  CognitoEssentialsMAU: "Cognito monthly active users",
+  "VendedLog-Bytes": "Vended logs",
+  ScheduledInvocation: "Scheduled invocations",
+};
+
+/** "USE2-MP:USE2_InputTokenCount-Units" -> "Input tokens". Names outside the home region say which one; unknown names are tidied, never hidden. */
+export function usageLabel(name: string): string {
+  const prefixed = /^(USE1|USE2|USW1|USW2|EUW1|EUC1)-(.+)$/.exec(name);
+  const named = /^((?:us|eu|ap|ca|sa)-[a-z]+-\d)-(.+)$/.exec(name);
+  const region = prefixed ? REGION_CODES[prefixed[1] ?? ""] : named?.[1];
+  const rest = (prefixed ?? named)?.[2] ?? name;
+  const hop = /^(USE1|USE2|USW1|USW2|EUW1|EUC1)-AWS-(In|Out)-Bytes$/.exec(rest); // traffic between two regions
+  const label = hop
+    ? `Data transfer ${hop[2] === "In" ? "from" : "to"} ${REGION_CODES[hop[1] ?? ""]}`
+    : (USAGE_NAMES[rest] ??
+      friendly(rest.replace(/^MP:[A-Z0-9]+_/, "").replace(/[:-]+/g, " "))
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((word, i) => (i === 0 || word === word.toUpperCase() ? word : word.toLowerCase())) // sentence case, acronyms kept
+        .join(" ")
+        .replace(/^./, (c) => c.toUpperCase()));
+  return region && region !== HOME_REGION ? `${label} (${region})` : label;
+}
+
 /** An API stage with a known project reads "<project> API". An ARN without its partition, service, region and account, and without a "table/" or "inference-profile/" type prefix ("Orders"); other IDs pass through; no ID gets a label. */
 export function shortResource(id: string, project?: string): string {
   if (id === "" || id.startsWith("(")) return "(no resource ID)";

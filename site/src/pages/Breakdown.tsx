@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { RankedBars } from "../charts";
-import { UNATTRIBUTED, inRange, money, ranked, shortDate, sumGroup } from "../model";
+import { UNATTRIBUTED, friendly, inRange, money, ranked, shortDate, sumGroup, usageLabel } from "../model";
 import type { Day, Group, Range } from "../model";
 import { Empty, Note } from "./parts";
 
@@ -34,7 +34,7 @@ export function Breakdown({ days, range }: { days: Day[]; range: Range }) {
           <section className="panel" key={group} aria-labelledby={`${group}-h`}>
             <h2 id={`${group}-h`}>{title}</h2>
             <p className="muted">{hint}</p>
-            <RankedBars items={items.slice(0, 10)} total={total} names={names} />
+            <RankedBars items={items.slice(0, 10)} total={total} names={names} labelOf={group === "usageTypes" ? usageLabel : friendly} />
             {items.length > 10 && <p className="muted">and {items.length - 10} smaller</p>}
           </section>
         );
