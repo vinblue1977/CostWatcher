@@ -274,6 +274,13 @@ def test_ingest_runs_daily_and_failures_email_the_alert_topic() -> None:
     template = _template()
     template.has_resource_properties("AWS::Events::Rule", {"ScheduleExpression": "cron(30 8 * * ? *)"})
     template.has_resource_properties(
+        "AWS::Events::Rule",
+        {
+            "ScheduleExpression": "cron(0 9 ? * MON *)",
+            "Targets": Match.array_with([Match.object_like({"Input": '{"digest":true}'})]),
+        },
+    )
+    template.has_resource_properties(
         "AWS::CloudWatch::Alarm", {"MetricName": "Errors", "Threshold": 1, "Namespace": "AWS/Lambda", "Period": 3600}
     )
 

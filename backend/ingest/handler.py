@@ -24,7 +24,12 @@ def _client(name: str) -> Any:
 
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
-    """Re-reads this month (and last month early in a month). `{"months": ["2026-09"]}` backfills by hand."""
+    """Re-reads this month (and last month early in a month). `{"months": ["2026-09"]}` backfills by hand.
+
+    `{"digest": true}` (the weekly schedule) emails the week's summary from the stored days instead.
+    """
+    if event.get("digest") is True:
+        return {"digest": _digest(_client("dynamodb"), dt.datetime.now(dt.UTC).date())}
     months = _months(event, dt.datetime.now(dt.UTC).date())
     athena, dynamodb = _client("athena"), _client("dynamodb")
     written = {}
@@ -83,6 +88,20 @@ def _notify(days: dict[str, dict[str, Any]], today: dt.date, dynamodb: Any) -> l
     return sent
 
 
+def _digest(dynamodb: Any, today: dt.date) -> bool:
+    """Publishes the weekly summary of the stored days; skipped when the export looks stale."""
+    month = today.strftime("%Y-%m")
+    previous = (today.replace(day=1) - dt.timedelta(days=1)).strftime("%Y-%m")
+    days = {**_stored_days(dynamodb, previous, 2 * analysis.TRAILING_DAYS), **_stored_days(dynamodb, month, 31)}
+    summary = analysis.digest(days, Decimal(os.environ["BUDGET_USD"]))
+    if summary is None or (today - dt.date.fromisoformat(max(days))).days > ALERT_FRESH_DAYS:
+        print("No digest: the stored days are missing or stale")
+        return False
+    subject, message = summary
+    _client("sns").publish(TopicArn=os.environ["TOPIC_ARN"], Subject=subject[:100], Message=message)
+    return True
+
+
 def _with_history(days: dict[str, dict[str, Any]], dynamodb: Any) -> dict[str, dict[str, Any]]:
     """Adds the last stored days of the month before the newest day's, when the alert baseline would otherwise be short.
 
@@ -96,14 +115,14 @@ def _with_history(days: dict[str, dict[str, Any]], dynamodb: Any) -> dict[str, d
     return {**_stored_days(dynamodb, previous), **days}
 
 
-def _stored_days(dynamodb: Any, month: str) -> dict[str, dict[str, Any]]:
-    """The month's last baseline-sized run of days as the ingest wrote them, back in the shape `_days` builds."""
+def _stored_days(dynamodb: Any, month: str, limit: int = analysis.TRAILING_DAYS) -> dict[str, dict[str, Any]]:
+    """The month's newest `limit` days (one page: a month of items is far under 1 MB) in the shape `_days` builds."""
     page = dynamodb.query(
         TableName=os.environ["TABLE_NAME"],
         KeyConditionExpression="PK = :pk AND begins_with(SK, :sk)",
         ExpressionAttributeValues={":pk": {"S": f"COST#{month}"}, ":sk": {"S": "DAY#"}},
         ScanIndexForward=False,  # newest first, so the limit keeps the days nearest this month
-        Limit=analysis.TRAILING_DAYS,
+        Limit=limit,
         ConsistentRead=True,
     )
     return {
