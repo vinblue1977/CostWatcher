@@ -82,7 +82,8 @@ def _free_tier(table: Any = None) -> dict[str, Any]:
         ConsistentRead=True,
     )
     item = page["Items"][0] if page["Items"] else {}
-    return _json(200, {"month": item.get("month"), "usages": item.get("usages", [])})
+    usages = item.get("usages", [])
+    return _json(200, {"month": item.get("month"), "total": item.get("total", len(usages)), "usages": usages})
 
 
 def _json(status: int, body: dict[str, Any]) -> dict[str, Any]:

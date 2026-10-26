@@ -198,5 +198,5 @@ td .track { display: block; }
   .allowance { grid-template-columns: minmax(0, 1fr) auto; }
   .allowance .pill { grid-column: 2; }
   .allowance .allow-meter { grid-column: 1 / -1; grid-row: 2; }
-  .nav a { padding-inline: 2px; white-space: nowrap; }
+  .nav a { padding-inline: 2px; }
 }

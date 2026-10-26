@@ -35,14 +35,15 @@ export function FreeTierPage({ load, now = new Date() }: { load: () => Promise<F
       </p>
     );
   }
-  const { month, usages } = state.data;
+  const { month, usages, total } = state.data;
   if (!month || usages.length === 0 || month !== now.toISOString().slice(0, 7)) {
     return (
       <section className="panel empty">
         <h2>No free-tier data for this month yet</h2>
         <p className="muted">
-          The daily import (08:30 UTC) stores your free-tier allowances from the AWS Free Tier API. Nothing is wrong; there is just
-          nothing to show yet{month && usages.length > 0 ? `, and the last import was for ${monthName(month)}` : ""}.
+          {month && usages.length > 0
+            ? `The last import was for ${monthName(month)}. The daily import (08:30 UTC) stores the new month's allowances; if this is still showing after a day, check the ingest alarm.`
+            : "The daily import (08:30 UTC) stores your free-tier allowances from the AWS Free Tier API. Nothing is wrong; there is just nothing to show yet."}
         </p>
       </section>
     );
@@ -62,7 +63,7 @@ export function FreeTierPage({ load, now = new Date() }: { load: () => Promise<F
       <div className="figures">
         <div className="card">
           <div className="label">Allowances over the limit</div>
-          <div className="value">{over.length} of {usages.length}</div>
+          <div className="value">{over.length} of {total}</div>
           <div className="sub">Billed once past the limit</div>
         </div>
         <div className={watch.length > 0 ? "card hot" : "card"}>
@@ -74,7 +75,7 @@ export function FreeTierPage({ load, now = new Date() }: { load: () => Promise<F
 
       {worst && (
         <p className="alert soft" role="status">
-          {worst.service} ({allowanceName(worst)}) {allowance(worst) === "over" ? "is over its free tier." : `is on pace to pass its free tier${soon(worst, month, today)}.`}
+          {worst.service}{allowanceName(worst) === worst.service ? "" : ` (${allowanceName(worst)})`} {allowance(worst) === "over" ? "is over its free tier." : `is on pace to pass its free tier${soon(worst, month, today)}.`}
           {over.length + watch.length > 1 && ` ${over.length + watch.length - 1} more below.`}
         </p>
       )}

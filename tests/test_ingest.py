@@ -594,10 +594,16 @@ def test_the_free_tier_client_is_the_us_east_1_one(monkeypatch: pytest.MonkeyPat
 
     made: list[tuple[str, dict[str, Any]]] = []
     fake = types.SimpleNamespace(client=lambda name, **kwargs: made.append((name, kwargs)))
+    botocore = types.ModuleType("botocore")
+    config = types.ModuleType("botocore.config")
+    config.Config = lambda **kwargs: kwargs  # pyright: ignore[reportAttributeAccessIssue]
     monkeypatch.setitem(sys.modules, "boto3", fake)
+    monkeypatch.setitem(sys.modules, "botocore", botocore)
+    monkeypatch.setitem(sys.modules, "botocore.config", config)
     ingest._client("freetier")
     ingest._client("sns")
-    assert made == [("freetier", {"region_name": "us-east-1"}), ("sns", {})]
+    bounds = {"connect_timeout": 5, "read_timeout": 10, "retries": {"max_attempts": 2}}
+    assert made == [("freetier", {"region_name": "us-east-1", "config": bounds}), ("sns", {})]
 
 
 def test_a_failed_free_tier_lookup_still_writes_costs_then_fails_the_run(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -630,7 +636,8 @@ def test_a_malformed_entry_is_skipped_and_the_list_is_capped() -> None:
     many = [_usage(usageType=f"t{i}", actualUsageAmount=float(i)) for i in range(ingest.FREE_TIER_LISTED + 5)]
     usages = ingest._free_tier_usages(FakeFreeTier([bad, junk, *many]))
     assert len(usages) == len(many)  # the two bad ones are gone
-    assert len(ingest._free_tier_item("2026-10", usages)["usages"]["L"]) == ingest.FREE_TIER_LISTED
+    item = ingest._free_tier_item("2026-10", usages)
+    assert len(item["usages"]["L"]) == ingest.FREE_TIER_LISTED and item["total"] == {"N": str(len(many))}
     assert ingest._free_tier_usages(type("Empty", (), {"get_free_tier_usage": lambda self, **k: {}})()) == []
 
 

@@ -33,7 +33,12 @@ ALERT_FRESH_DAYS = 3  # a hand-run backfill of old months must not email about t
 def _client(name: str) -> Any:
     import boto3  # pyright: ignore[reportMissingImports]  # in the Lambda runtime; imported late so tests need not have it
 
-    return boto3.client(name, region_name=FREE_TIER_REGION) if name == "freetier" else boto3.client(name)
+    if name == "freetier":  # optional work that runs before the Athena queries: bound its time
+        from botocore.config import Config  # pyright: ignore[reportMissingImports]
+
+        config = Config(connect_timeout=5, read_timeout=10, retries={"max_attempts": 2})
+        return boto3.client(name, region_name=FREE_TIER_REGION, config=config)
+    return boto3.client(name)
 
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -94,6 +99,7 @@ def _free_tier_usages(client: Any) -> list[dict[str, Any]]:
                 limit, actual = Decimal(str(u.get("limit") or 0)), Decimal(str(u.get("actualUsageAmount") or 0))
                 forecast = Decimal(str(u.get("forecastedUsageAmount") or actual))
             except InvalidOperation:  # one malformed entry must not discard the rest
+                print(f"Skipped a malformed free-tier entry: {u.get('service')} {u.get('usageType')}")
                 continue
             if not (limit.is_finite() and actual.is_finite()) or limit <= 0:
                 continue
@@ -118,18 +124,13 @@ def _free_tier_usages(client: Any) -> list[dict[str, Any]]:
 def _free_tier_item(month: str, usages: list[dict[str, Any]]) -> dict[str, Any]:
     """One item, rewritten daily, under its own key so `GET /costs/{month}` stays small."""
     numbers = ("limit", "actual", "forecast")
+    ordered = sorted(usages, key=lambda u: (-u["forecast"] / u["limit"], u["service"], u["usageType"]))[:FREE_TIER_LISTED]
     return {
         "PK": {"S": "FREETIER"},
         "SK": {"S": "CURRENT"},
         "month": {"S": month},
-        "usages": {
-            "L": [
-                {"M": {k: ({"N": str(v)} if k in numbers else {"S": str(v)}) for k, v in u.items()}}
-                for u in sorted(usages, key=lambda u: (-u["forecast"] / u["limit"], u["service"], u["usageType"]))[
-                    :FREE_TIER_LISTED
-                ]
-            ]
-        },
+        "total": {"N": str(len(usages))},  # the page says "x of total" even when the list was cut
+        "usages": {"L": [{"M": {k: ({"N": str(v)} if k in numbers else {"S": str(v)}) for k, v in u.items()}} for u in ordered]},
     }
 
 
