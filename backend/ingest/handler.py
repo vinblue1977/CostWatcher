@@ -4,7 +4,7 @@ import datetime as dt
 import os
 import re
 import time
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from ingest import analysis
@@ -25,6 +25,7 @@ PRODUCT_NAMES = {
     "9svps415mdwhhoxlp2tx3hald": "Bedrock Claude Sonnet",
 }
 FREE_TIER_REGION = "us-east-1"  # the Free Tier API has a single endpoint, whatever region the usage is in
+FREE_TIER_LISTED = 200  # rows kept, worst first, so the one item stays far under the 400 KB limit
 FREE_TIER_PACE_MIN = 4  # a pace alert waits until a quarter of the allowance is used: early-month forecasts swing wildly
 ALERT_FRESH_DAYS = 3  # a hand-run backfill of old months must not email about them
 
@@ -53,8 +54,15 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         written[month] = len(days)
         seen.update(days)
     sent = _notify(seen, dt.datetime.now(dt.UTC).date(), dynamodb)
-    # The untagged summary comes last and is isolated: a failure must not cost the day's alerts, but must still fail the run.
+    # The summaries come last and are isolated: a failure must not cost the day's alerts, but must still fail the run.
+    # The free-tier lookup is quick, so it goes before the Athena queries that can use up the Lambda's time.
     failed = []
+    if "months" not in event:  # a hand-run backfill of old months has no bearing on this month's allowances
+        try:
+            sent += _free_tier(_client("freetier"), dynamodb, dt.datetime.now(dt.UTC).date())
+        except Exception as error:
+            print(f"Free tier usage failed: {error!r}")
+            failed.append("free tier")
     for month in months:
         try:
             summary = _untagged(_query(athena, _untagged_sql(month), _spare_seconds(context)))
@@ -63,12 +71,6 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as error:
             print(f"Untagged summary for {month} failed: {error!r}")
             failed.append(month)
-    if "months" not in event:  # a hand-run backfill of old months has no bearing on this month's allowances
-        try:
-            sent += _free_tier(_client("freetier"), dynamodb, dt.datetime.now(dt.UTC).date())
-        except Exception as error:
-            print(f"Free tier usage failed: {error!r}")
-            failed.append("free tier")
     if failed:
         raise RuntimeError(f"The summaries failed for {', '.join(failed)}; costs and alerts were written")
     return {"written": written, "alerts": sent}
@@ -87,11 +89,14 @@ def _free_tier_usages(client: Any) -> list[dict[str, Any]]:
     request: dict[str, Any] = {"maxResults": 1000}
     while True:
         page = client.get_free_tier_usage(**request)
-        for u in page["freeTierUsages"]:
-            limit, actual = Decimal(str(u.get("limit", 0))), Decimal(str(u.get("actualUsageAmount", 0)))
+        for u in page.get("freeTierUsages", []):
+            try:
+                limit, actual = Decimal(str(u.get("limit") or 0)), Decimal(str(u.get("actualUsageAmount") or 0))
+                forecast = Decimal(str(u.get("forecastedUsageAmount") or actual))
+            except InvalidOperation:  # one malformed entry must not discard the rest
+                continue
             if not (limit.is_finite() and actual.is_finite()) or limit <= 0:
                 continue
-            forecast = Decimal(str(u.get("forecastedUsageAmount", actual)))
             usages.append(
                 {
                     "service": u.get("service", "unknown"),
@@ -120,7 +125,9 @@ def _free_tier_item(month: str, usages: list[dict[str, Any]]) -> dict[str, Any]:
         "usages": {
             "L": [
                 {"M": {k: ({"N": str(v)} if k in numbers else {"S": str(v)}) for k, v in u.items()}}
-                for u in sorted(usages, key=lambda u: (-u["forecast"] / u["limit"], u["service"], u["usageType"]))
+                for u in sorted(usages, key=lambda u: (-u["forecast"] / u["limit"], u["service"], u["usageType"]))[
+                    :FREE_TIER_LISTED
+                ]
             ]
         },
     }
@@ -140,7 +147,7 @@ def _free_tier_alerts(usages: list[dict[str, Any]], month: str, dynamodb: Any) -
         else:
             continue
         message = f"{u['service']} ({u['usageType'] or u['operation']}, {u['region']}, {u['type']}): {detail}"
-        key = f"freetier#{kind}#{u['service']}#{u['usageType']}#{u['region']}"
+        key = f"freetier#{kind}#{u['service']}#{u['operation']}#{u['usageType']}#{u['region']}#{u['type']}"
         if _publish_once(dynamodb, f"ALERT#{month}", analysis.Alert(key, subject, message)):
             sent.append(key)
     return sent

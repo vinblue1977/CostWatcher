@@ -85,13 +85,15 @@ type Ready = Extract<State, { kind: "ready" }>;
 
 export function Shell({ state, path, range, setRange, loadTags, loadAllowances }: { state: Ready; path: string; range: Range; setRange: (r: Range) => void; loadTags?: (month: string) => Promise<Untagged>; loadAllowances?: () => Promise<FreeTier> }) {
   const page = PAGES.find((p) => p.path === path)?.path ?? "/";
+  const config = state.config;
+  const freeTier = useCallback(() => loadFreeTier(config), [config]);
   const body = useMemo(() => {
     if (page === "/breakdown") return <Breakdown days={state.days} range={range} />;
     if (page === "/spikes") return <Spikes days={state.days} />;
     if (page === "/tags") return <Tags days={state.days} load={loadTags ?? ((month) => loadUntagged(state.config, month))} />;
-    if (page === "/free-tier") return <FreeTierPage load={loadAllowances ?? (() => loadFreeTier(state.config))} />;
+    if (page === "/free-tier") return <FreeTierPage load={loadAllowances ?? freeTier} />;
     return <Overview days={state.days} range={range} budget={state.config.budgetUsd} />;
-  }, [page, state, range, loadTags, loadAllowances]);
+  }, [page, state, range, loadTags, loadAllowances, freeTier]);
   return (
     <div className="shell">
       <header className="top">

@@ -622,3 +622,23 @@ def test_a_hand_run_backfill_skips_the_free_tier(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(ingest, "_client", lambda name: clients[name])  # a "freetier" lookup would KeyError
     monkeypatch.setattr(ingest, "_notify", lambda *args: [])
     assert ingest.handler({"months": ["2026-10"]}, None)["written"] == {"2026-10": 1}
+
+
+def test_a_malformed_entry_is_skipped_and_the_list_is_capped() -> None:
+    bad = _usage(limit=None, usageType="bad")
+    junk = _usage(limit="NaN", usageType="nan")
+    many = [_usage(usageType=f"t{i}", actualUsageAmount=float(i)) for i in range(ingest.FREE_TIER_LISTED + 5)]
+    usages = ingest._free_tier_usages(FakeFreeTier([bad, junk, *many]))
+    assert len(usages) == len(many)  # the two bad ones are gone
+    assert len(ingest._free_tier_item("2026-10", usages)["usages"]["L"]) == ingest.FREE_TIER_LISTED
+    assert ingest._free_tier_usages(type("Empty", (), {"get_free_tier_usage": lambda self, **k: {}})()) == []
+
+
+def test_allowances_that_differ_only_by_type_alert_separately(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent: list[str] = []
+    monkeypatch.setattr(
+        ingest, "_client", lambda name: type("Sns", (), {"publish": lambda self, **k: sent.append(k["Subject"])})()
+    )
+    a = _usage(actualUsageAmount=2000000.0, freeTierType="Always Free")
+    b = _usage(actualUsageAmount=2000000.0, freeTierType="12 Months Free")
+    assert len(ingest._free_tier_alerts(ingest._free_tier_usages(FakeFreeTier([a, b])), "2026-10", Marker())) == 2
