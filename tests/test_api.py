@@ -99,3 +99,25 @@ def test_handler_routes_tags_and_validates_the_month(monkeypatch: Any) -> None:
 def test_untagged_tolerates_a_partial_item() -> None:
     body = json.loads(api._untagged("2026-10", FakeTable({"Items": [{"PK": "HYGIENE#2026-10", "SK": "UNTAGGED"}]}))["body"])
     assert body == {"month": "2026-10", "resources": [], "otherCount": 0, "otherCost": 0}
+
+
+def test_free_tier_returns_the_stored_allowances_or_an_empty_list() -> None:
+    item = {
+        "PK": "FREETIER",
+        "SK": "CURRENT",
+        "month": "2026-10",
+        "usages": [{"service": "AWS Lambda", "limit": Decimal("1000000.0")}],
+    }
+    table = FakeTable({"Items": [item]}, {"Items": []})
+    assert json.loads(api._free_tier(table)["body"]) == {
+        "month": "2026-10",
+        "usages": [{"service": "AWS Lambda", "limit": 1000000}],
+    }
+    assert table.queries[0]["ExpressionAttributeValues"] == {":pk": "FREETIER", ":sk": "CURRENT"}
+    assert table.queries[0]["ConsistentRead"] is True
+    assert json.loads(api._free_tier(table)["body"]) == {"month": None, "usages": []}
+
+
+def test_handler_routes_free_tier(monkeypatch: Any) -> None:
+    monkeypatch.setattr(api, "_days_table", lambda: FakeTable({"Items": []}))
+    assert api.handler(_event("GET /freetier"), None)["statusCode"] == 200

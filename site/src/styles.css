@@ -174,3 +174,27 @@ td .track { display: block; }
   .tabs button { flex: 1 1 0; }
   .share-col { display: none; }
 }
+
+.card.hot { background: var(--warn-bg); border-color: var(--warn-line); }
+.card.hot .value { color: var(--warn-text); }
+.allowances { margin: 16px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.allowance { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 2fr) auto; gap: 8px 20px; align-items: center; padding: 14px 0; border-top: 1px solid var(--line); }
+.allowance:first-child { border-top: 0; padding-top: 0; }
+.allowance .who { display: flex; flex-direction: column; gap: 2px; min-width: 0; grid-column: 1; grid-row: 1; }
+.allowance .title { font-size: 14px; font-weight: 550; overflow-wrap: anywhere; }
+.allowance .sub { font-size: 12px; color: var(--faint); }
+.allowance .meter { grid-column: 2; grid-row: 1; min-width: 0; }
+.allowance .pill { grid-column: 3; grid-row: 1; justify-self: end; }
+.gauge { position: relative; height: 8px; border-radius: 4px; background: var(--track); }
+.gauge .fill { position: absolute; inset: 0 auto 0 0; height: 100%; border-radius: 4px; }
+.gauge .fill.watch { background: var(--warn); }
+.gauge .fill.over { background: #ff7b72; }
+.gauge .tick { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -2px; border-radius: 1px; background: var(--text-2); }
+.nums { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pill { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--good); white-space: nowrap; }
+.pill.watch { color: var(--warn-text); background: var(--warn-bg); border-color: var(--warn-line); }
+.pill.over { color: #ff7b72; background: #2d1618; border-color: #6b2a2d; }
+@media (max-width: 640px) {
+  .allowance { grid-template-columns: minmax(0, 1fr) auto; }
+  .allowance .meter { grid-column: 1 / -1; grid-row: 2; }
+}

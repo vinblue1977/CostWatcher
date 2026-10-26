@@ -308,3 +308,50 @@ const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "Ju
 export function monthName(month: string): string {
   return `${MONTH_NAMES[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`;
 }
+
+/** One free-tier allowance for the current month, as the ingest stores it from the AWS Free Tier API. */
+export interface FreeTierUsage {
+  service: string;
+  operation: string;
+  usageType: string;
+  region: string;
+  unit: string;
+  type: string; // "Always Free", "12 Months Free", "Free Trial"
+  limit: number;
+  actual: number;
+  forecast: number; // AWS's month-end projection, never below usage so far
+}
+export type Allowance = "over" | "watch" | "ok";
+
+export function allowance(u: FreeTierUsage): Allowance {
+  if (u.actual > u.limit) return "over";
+  return u.forecast > u.limit ? "watch" : "ok";
+}
+
+/** Worst first (over, then projected to run out), then by how much of the limit is projected to be used. */
+export function sortAllowances(usages: FreeTierUsage[]): FreeTierUsage[] {
+  const order: Record<Allowance, number> = { over: 0, watch: 1, ok: 2 };
+  return [...usages].sort(
+    (a, b) => order[allowance(a)] - order[allowance(b)] || b.forecast / b.limit - a.forecast / a.limit || a.service.localeCompare(b.service),
+  );
+}
+
+/** The date the month's pace reaches the limit (the same pace for every remaining day), or null when it will not within the month. */
+export function runsOutOn(u: FreeTierUsage, month: string, today: number): string | null {
+  const perDay = u.actual / Math.max(today, 1);
+  if (perDay <= 0 || u.actual >= u.limit) return null;
+  const day = today + Math.ceil((u.limit - u.actual) / perDay);
+  const last = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate();
+  return day > last ? null : `${month}-${String(day).padStart(2, "0")}`;
+}
+
+/** "5.8", "820,000": whole numbers once large, two decimals when small. */
+export function amount(value: number): string {
+  return Math.abs(value) >= 100 ? Math.round(value).toLocaleString("en-US") : String(Math.round(value * 100) / 100);
+}
+
+/** Days until the UTC month containing `now` resets, counting today (on the last day it is 1). */
+export function daysUntilReset(now: Date): number {
+  const last = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate();
+  return last - now.getUTCDate() + 1;
+}

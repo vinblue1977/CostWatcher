@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { baseline, drivers, forecast, friendly, inRange, isSpike, latestSpike, money, monthName, movers, previousMonth, shiftDate, shortResource, usageLabel, stack, tagCoverage, weekOverWeek } from "./model";
-import type { Day } from "./model";
+import { allowance, amount, baseline, daysUntilReset, runsOutOn, sortAllowances, drivers, forecast, friendly, inRange, isSpike, latestSpike, money, monthName, movers, previousMonth, shiftDate, shortResource, usageLabel, stack, tagCoverage, weekOverWeek } from "./model";
+import type { Day, FreeTierUsage } from "./model";
 
 function day(date: string, total: number, services: Record<string, number> = { S3: total }, usageTypes: Record<string, number> = {}): Day {
   return { date, total, services, projects: {}, usageTypes };
@@ -176,5 +176,32 @@ describe("usageLabel", () => {
     expect(usageLabel("Requests-Tier1")).toBe("Requests tier1");
     expect(usageLabel("USE2-")).not.toBe("");
     expect(usageLabel("")).toBe("");
+  });
+});
+
+describe("free tier", () => {
+  const use = (actual: number, forecast: number, limit = 100): FreeTierUsage => ({ service: "AWS Lambda", operation: "", usageType: "Request", region: "us-east-2", unit: "Requests", type: "Always Free", limit, actual, forecast });
+  it("is over past the limit, watched when the forecast passes it and on track otherwise", () => {
+    expect(allowance(use(101, 120))).toBe("over");
+    expect(allowance(use(100, 100))).toBe("ok"); // exactly at the limit is still free
+    expect(allowance(use(60, 130))).toBe("watch");
+    expect(allowance(use(10, 40))).toBe("ok");
+  });
+  it("lists the worst first, then the largest projected share", () => {
+    const order = sortAllowances([use(10, 40), use(60, 130), use(150, 200), use(30, 90)]).map((u) => u.actual);
+    expect(order).toEqual([150, 60, 30, 10]);
+  });
+  it("dates the run-out from the pace so far and says nothing when it falls after the month", () => {
+    expect(runsOutOn(use(60, 120), "2026-10", 15)).toBe("2026-10-25"); // 4 a day, 40 left: 10 more days
+    expect(runsOutOn(use(10, 20), "2026-10", 15)).toBeNull(); // 90 left at under 1 a day
+    expect(runsOutOn(use(0, 0), "2026-10", 15)).toBeNull();
+    expect(runsOutOn(use(150, 200), "2026-10", 15)).toBeNull(); // already over
+  });
+  it("formats amounts and counts the days to the reset", () => {
+    expect(amount(1234567)).toBe("1,234,567");
+    expect(amount(5.8)).toBe("5.8");
+    expect(amount(5.8333)).toBe("5.83");
+    expect(daysUntilReset(new Date("2026-10-25T10:00:00Z"))).toBe(7);
+    expect(daysUntilReset(new Date("2026-10-31T23:00:00Z"))).toBe(1);
   });
 });

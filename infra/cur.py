@@ -177,6 +177,8 @@ class Cur(Construct):
         )
         # Names the project of the untagged API stages (read-only; the tagging API has no resource-level permissions).
         fn.add_to_role_policy(iam.PolicyStatement(actions=["tag:GetResources"], resources=["*"]))
+        # Free-tier allowances and AWS's forecast for them (read-only; the Free Tier API has no resource-level permissions).
+        fn.add_to_role_policy(iam.PolicyStatement(actions=["freetier:GetFreeTierUsage"], resources=["*"]))
         glue_arn = f"arn:{stack.partition}:glue:{stack.region}:{stack.account}"
         fn.add_to_role_policy(
             iam.PolicyStatement(
