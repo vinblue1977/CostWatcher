@@ -13,6 +13,16 @@ Ideas and bugs found while building CostWatcher. The phased build plan is in [do
 - **Unit costs.** Cost per 1,000 Lambda invocations or per GB stored needs usage quantities; add `line_item_usage_amount` to the export columns and the ingest query first.
 - **Waste finder.** Idle NAT gateways, unattached EBS volumes, old snapshots and log groups without retention need a resource inventory (EC2, CloudWatch Logs APIs or AWS Config), which the export alone can't give.
 - **Per-resource detail.** The treemap needs cost per resource, which the daily item doesn't hold yet; it would need its own items to stay under the 400 KB item limit.
+- **Anomaly feedback.** A "not a spike" button on an alert that stores the dismissal and tunes thresholds per service.
+- **Savings tracker.** Record a service's monthly cost before and after a change (say, removing a NAT gateway) and show what it saved.
+- **Month-over-month compare.** The same service across two months side by side, biggest movers first.
+- **Cost of CostWatcher itself.** The card the Breakdown mockup wanted; needs the stack's spend to be separable by the `project` tag.
+- **Pace-to-budget line.** A daily chart line for the budget pace, so a projected overrun shows before the forecast alert fires.
+- **Free-tier watch.** Free-tier usage left for Lambda, DynamoDB and S3. Needs usage quantities in the export (same prerequisite as unit costs). In progress.
+- **Tag hygiene report.** Services with untagged spend, ranked by dollars.
+- **Push or Slack alerts.** SNS to a phone push or webhook, not just email.
+- **CSV export.** A download button on the Breakdown and Spikes pages.
+- **Data freshness badge.** When the last ingest ran and whether the latest day is partial.
 
 ## Bugs and risks
 
