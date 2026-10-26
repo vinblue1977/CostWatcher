@@ -1,4 +1,4 @@
-"""HTTP API Lambda: the signed-in user's daily cost aggregates and untagged resources, read from DynamoDB, never Athena."""
+"""HTTP API Lambda: the signed-in user's costs, untagged resources and free-tier usage, read from DynamoDB, never Athena."""
 
 import json
 import os
@@ -28,6 +28,8 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return _costs((event.get("pathParameters") or {}).get("month", ""))
     if event.get("routeKey") == "GET /tags/{month}":
         return _untagged((event.get("pathParameters") or {}).get("month", ""))
+    if event.get("routeKey") == "GET /freetier":
+        return _free_tier()
     return _json(404, {"error": "not found"})
 
 
@@ -69,6 +71,18 @@ def _untagged(month: str, table: Any = None) -> dict[str, Any]:
             "otherCost": item.get("otherCost", 0),
         },
     )
+
+
+def _free_tier(table: Any = None) -> dict[str, Any]:
+    """This month's free-tier allowances (PK FREETIER), which the ingest Lambda rewrites daily."""
+    table = table or _days_table()
+    page = table.query(
+        KeyConditionExpression="PK = :pk AND SK = :sk",
+        ExpressionAttributeValues={":pk": "FREETIER", ":sk": "CURRENT"},
+        ConsistentRead=True,
+    )
+    item = page["Items"][0] if page["Items"] else {}
+    return _json(200, {"month": item.get("month"), "usages": item.get("usages", [])})
 
 
 def _json(status: int, body: dict[str, Any]) -> dict[str, Any]:

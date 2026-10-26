@@ -33,7 +33,11 @@ function handler(event) {
 }
 """
 
-ROUTES = ((apigw.HttpMethod.GET, "/costs/{month}"), (apigw.HttpMethod.GET, "/tags/{month}"))
+ROUTES = (
+    (apigw.HttpMethod.GET, "/costs/{month}"),
+    (apigw.HttpMethod.GET, "/tags/{month}"),
+    (apigw.HttpMethod.GET, "/freetier"),
+)
 
 
 class Web(Construct):

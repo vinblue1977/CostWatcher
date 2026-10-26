@@ -18,7 +18,6 @@ Ideas and bugs found while building CostWatcher. The phased build plan is in [do
 - **Month-over-month compare.** The same service across two months side by side, biggest movers first.
 - **Cost of CostWatcher itself.** The card the Breakdown mockup wanted; needs the stack's spend to be separable by the `project` tag.
 - **Pace-to-budget line.** A daily chart line for the budget pace, so a projected overrun shows before the forecast alert fires.
-- **Free-tier watch.** Free-tier usage left for Lambda, DynamoDB and S3. Needs usage quantities in the export (same prerequisite as unit costs). In progress.
 - **Tag hygiene report.** Services with untagged spend, ranked by dollars.
 - **Push or Slack alerts.** SNS to a phone push or webhook, not just email.
 - **CSV export.** A download button on the Breakdown and Spikes pages.
@@ -51,4 +50,7 @@ Ideas and bugs found while building CostWatcher. The phased build plan is in [do
 - **Project attribution applies going forward only.** The `project` cost allocation tag is activated (2026-10-20), but AWS tags only costs from activation on; earlier spend stays "unattributed".
 - **The ingest never deletes a day.** If AWS drops a day from a revised month, its old item stays in DynamoDB.
 - **The export is kept on stack delete.** The bucket has a retain policy because history can't be re-fetched; delete it by hand if the project is abandoned.
+- **Free tier numbers come from AWS, unchecked.** The Free tier page and its alerts use the Free Tier API's usage, limit and forecast as given. Its forecast swings early in a month, so a "on pace to pass" email waits until a quarter of the allowance is used; tune `FREE_TIER_PACE_MIN` after a few months.
+- **Free tier alerts fire once per allowance per month and kind** (on pace, then over). The page shows the first of several allowances in its banner only; the rest are in the list below it.
+- **The Free tier page is untested with real data in a browser.** It was built from the approved mockup and unit-tested on the model only. The mockup's "cost past the free tier" card is not built: the API reports usage, not dollars.
 - **Bedrock models show as opaque product codes.** The Anthropic models on Bedrock are billed under marketplace codes in `line_item_product_code`. `PRODUCT_NAMES` in `backend/ingest/handler.py` maps the three seen so far (Opus, Haiku, Sonnet 4.5); any other model shows its raw code until it is added. The lasting fix is to add `product_product_name` to the export columns (an export and Glue table change) and use it in the service expression.

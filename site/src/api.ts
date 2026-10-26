@@ -1,6 +1,6 @@
 import { accessToken, forgetTokens } from "./auth";
 import type { Config } from "./auth";
-import type { Day } from "./model";
+import type { Day, FreeTierUsage } from "./model";
 
 export class SignedOut extends Error {}
 
@@ -22,6 +22,11 @@ export interface Untagged {
   otherCost: number;
 }
 
+export interface FreeTier {
+  month: string | null; // null before the first ingest has stored anything
+  usages: FreeTierUsage[];
+}
+
 async function get<T>(config: Config, token: string, path: string): Promise<T> {
   const response = await fetch(`${config.apiUrl}/${path}`, { headers: { Authorization: `Bearer ${token}` } });
   if (response.status === 401) {
@@ -41,6 +46,13 @@ export async function loadUntagged(config: Config, key: string): Promise<Untagge
   const token = await accessToken(config);
   if (!token) throw new SignedOut();
   return get<Untagged>(config, token, `tags/${key}`);
+}
+
+/** This month's free-tier allowances and AWS's forecast for each. */
+export async function loadFreeTier(config: Config): Promise<FreeTier> {
+  const token = await accessToken(config);
+  if (!token) throw new SignedOut();
+  return get<FreeTier>(config, token, "freetier");
 }
 
 /** The current UTC month and the one before, enough for a 30-day range and the 7-versus-7 comparison. */

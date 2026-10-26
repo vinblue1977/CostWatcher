@@ -368,7 +368,7 @@ def test_a_failed_untagged_summary_still_sends_alerts_then_fails_the_run(monkeyp
 
     monkeypatch.setattr(ingest, "_client", lambda name: Athena() if name == "athena" else Dynamo())
     monkeypatch.setattr(ingest, "_notify", lambda *args: notified.append(True) or [])
-    with pytest.raises(RuntimeError, match="untagged summary failed for 2026-10"):
+    with pytest.raises(RuntimeError, match="summaries failed for 2026-10"):
         ingest.handler({"months": ["2026-10"]}, None)
     assert puts == ["COST#2026-10"] and notified == [True]
 
@@ -473,3 +473,152 @@ def test_no_tag_lookup_without_api_stage_rows(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv("AWS_REGION", "us-east-2")
     monkeypatch.setattr(ingest, "_client", lambda name: pytest.fail("no lookup expected"))
     ingest._name_projects([{"id": "vol-1", "service": "AmazonEC2", "cost": Decimal(2)}])
+
+
+def _usage(**fields: Any) -> dict[str, Any]:
+    return {
+        "service": "AWS Lambda",
+        "operation": "Invoke",
+        "usageType": "Lambda-Requests",
+        "region": "us-east-2",
+        "unit": "Requests",
+        "freeTierType": "Always Free",
+        "limit": 1000000.0,
+        "actualUsageAmount": 460000.0,
+        "forecastedUsageAmount": 550000.0,
+        **fields,
+    }
+
+
+class FakeFreeTier:
+    def __init__(self, *pages: list[dict[str, Any]]) -> None:
+        self.pages = list(pages)
+        self.requests: list[dict[str, Any]] = []
+
+    def get_free_tier_usage(self, **kwargs: Any) -> dict[str, Any]:
+        self.requests.append(kwargs)
+        page: dict[str, Any] = {"freeTierUsages": self.pages[len(self.requests) - 1]}
+        if len(self.requests) < len(self.pages):
+            page["nextToken"] = str(len(self.requests))
+        return page
+
+
+def test_free_tier_usages_read_every_page_and_skip_allowances_without_a_limit() -> None:
+    client = FakeFreeTier(
+        [_usage(), _usage(limit=0.0, usageType="none")], [_usage(usageType="Lambda-GB-Second", unit="GB-Seconds")]
+    )
+    usages = ingest._free_tier_usages(client)
+    assert [u["usageType"] for u in usages] == ["Lambda-Requests", "Lambda-GB-Second"]
+    assert client.requests[1]["nextToken"] == "1"
+    assert usages[0]["limit"] == Decimal("1000000.0") and usages[0]["forecast"] == Decimal("550000.0")
+
+
+def test_a_forecast_below_usage_so_far_is_raised_to_it_and_a_missing_one_equals_it() -> None:
+    low = _usage(forecastedUsageAmount=1.0)
+    missing = {k: v for k, v in _usage().items() if k != "forecastedUsageAmount"}
+    assert [u["forecast"] for u in ingest._free_tier_usages(FakeFreeTier([low, missing]))] == [Decimal("460000.0")] * 2
+
+
+def test_free_tier_item_is_one_item_sorted_by_projected_share() -> None:
+    usages = ingest._free_tier_usages(FakeFreeTier([_usage(), _usage(usageType="Logs", forecastedUsageAmount=990000.0)]))
+    item = ingest._free_tier_item("2026-10", usages)
+    assert item["PK"] == {"S": "FREETIER"} and item["SK"] == {"S": "CURRENT"} and item["month"] == {"S": "2026-10"}
+    rows = item["usages"]["L"]
+    assert [r["M"]["usageType"]["S"] for r in rows] == ["Logs", "Lambda-Requests"]
+    assert rows[0]["M"]["limit"] == {"N": "1000000.0"} and rows[0]["M"]["unit"] == {"S": "Requests"}
+
+
+class Marker:
+    """A table that refuses a second put of the same alert marker, as the real condition does."""
+
+    def __init__(self) -> None:
+        self.items: list[dict[str, Any]] = []
+        self.keys: set[tuple[str, str]] = set()
+
+    def put_item(self, **kwargs: Any) -> None:
+        item = kwargs["Item"]
+        if "ConditionExpression" in kwargs:
+            key = (item["PK"]["S"], item["SK"]["S"])
+            if key in self.keys:
+                error = Exception("exists")
+                error.response = {"Error": {"Code": "ConditionalCheckFailedException"}}  # pyright: ignore[reportAttributeAccessIssue]
+                raise error
+            self.keys.add(key)
+        self.items.append(item)
+
+
+def test_free_tier_run_stores_the_item_and_alerts_once_per_month(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent: list[str] = []
+
+    class Sns:
+        def publish(self, **kwargs: Any) -> None:
+            sent.append(kwargs["Subject"])
+
+    table = Marker()
+    over = _usage(
+        service="Amazon CloudWatch",
+        usageType="DataProcessing-Bytes",
+        unit="GB",
+        limit=5.0,
+        actualUsageAmount=5.8,
+        forecastedUsageAmount=6.9,
+    )
+    pace = _usage(service="Amazon API Gateway", limit=1000000.0, actualUsageAmount=820000.0, forecastedUsageAmount=980000.0 * 1.1)
+    fine = _usage()
+    monkeypatch.setattr(ingest, "_client", lambda name: Sns())
+    today = dt.date(2026, 10, 25)
+    first = ingest._free_tier(FakeFreeTier([over, pace, fine]), table, today)
+    assert len(first) == 2 and sent == [
+        "Amazon CloudWatch is over its free tier",
+        "Amazon API Gateway is on pace to pass its free tier",
+    ]
+    assert table.items[0]["PK"] == {"S": "FREETIER"}
+    assert ingest._free_tier(FakeFreeTier([over, pace, fine]), table, today) == []  # tomorrow's run stays quiet
+    assert len(sent) == 2
+
+
+def test_an_early_month_pace_forecast_waits_for_a_quarter_of_the_allowance(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ingest, "_client", lambda name: pytest.fail("no email expected"))
+    early = _usage(actualUsageAmount=100000.0, forecastedUsageAmount=3000000.0)
+    assert ingest._free_tier_alerts(ingest._free_tier_usages(FakeFreeTier([early])), "2026-10", Marker()) == []
+
+
+def test_amounts_are_readable() -> None:
+    assert ingest._amount(Decimal("1234567.0")) == "1,234,567"
+    assert ingest._amount(Decimal("5.8")) == "5.80"
+
+
+def test_the_free_tier_client_is_the_us_east_1_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    import sys
+    import types
+
+    made: list[tuple[str, dict[str, Any]]] = []
+    fake = types.SimpleNamespace(client=lambda name, **kwargs: made.append((name, kwargs)))
+    monkeypatch.setitem(sys.modules, "boto3", fake)
+    ingest._client("freetier")
+    ingest._client("sns")
+    assert made == [("freetier", {"region_name": "us-east-1"}), ("sns", {})]
+
+
+def test_a_failed_free_tier_lookup_still_writes_costs_then_fails_the_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Dynamo(Marker):
+        def query(self, **kwargs: Any) -> dict[str, Any]:
+            return {"Items": []}
+
+    class Broken:
+        def get_free_tier_usage(self, **kwargs: Any) -> None:
+            raise RuntimeError("denied")
+
+    clients: dict[str, Any] = {"athena": DailyAndUntaggedAthena(), "dynamodb": Dynamo(), "freetier": Broken(), "sns": object()}
+    monkeypatch.setattr(ingest, "_client", lambda name: clients[name])
+    monkeypatch.setattr(ingest, "_notify", lambda *args: [])
+    with pytest.raises(RuntimeError, match="summaries failed for free tier"):
+        ingest.handler({}, None)
+    assert any(i["PK"]["S"].startswith("COST#") for i in clients["dynamodb"].items)  # the day was written before the failure
+
+
+def test_a_hand_run_backfill_skips_the_free_tier(monkeypatch: pytest.MonkeyPatch) -> None:
+    clients: dict[str, Any] = {"athena": DailyAndUntaggedAthena(), "dynamodb": Marker()}
+    monkeypatch.setattr(ingest, "_client", lambda name: clients[name])  # a "freetier" lookup would KeyError
+    monkeypatch.setattr(ingest, "_notify", lambda *args: [])
+    assert ingest.handler({"months": ["2026-10"]}, None)["written"] == {"2026-10": 1}

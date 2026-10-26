@@ -132,7 +132,7 @@ def test_api_routes_require_sign_in_and_site_is_private() -> None:
     template = _template()
     routes = template.find_resources("AWS::ApiGatewayV2::Route")
     by_key = {r["Properties"]["RouteKey"]: r["Properties"]["AuthorizationType"] for r in routes.values()}
-    assert by_key == {"GET /costs/{month}": "JWT", "GET /tags/{month}": "JWT"}
+    assert by_key == {"GET /costs/{month}": "JWT", "GET /tags/{month}": "JWT", "GET /freetier": "JWT"}
     template.has_resource_properties(
         "AWS::S3::Bucket",
         {
@@ -387,5 +387,24 @@ def test_export_is_tagged_too() -> None:
 def test_ingest_may_read_resource_tags_to_name_projects() -> None:
     _template().has_resource_properties(
         "AWS::IAM::Policy",
-        {"PolicyDocument": {"Statement": Match.array_with([{"Action": "tag:GetResources", "Effect": "Allow", "Resource": "*"}])}},
+        {
+            "PolicyDocument": {
+                "Statement": Match.array_with(
+                    [Match.object_like({"Action": Match.array_with(["tag:GetResources"]), "Resource": "*"})]
+                )
+            }
+        },
+    )
+
+
+def test_ingest_may_read_free_tier_usage() -> None:
+    _template().has_resource_properties(
+        "AWS::IAM::Policy",
+        {
+            "PolicyDocument": {
+                "Statement": Match.array_with(
+                    [Match.object_like({"Action": Match.array_with(["freetier:GetFreeTierUsage"]), "Resource": "*"})]
+                )
+            }
+        },
     )

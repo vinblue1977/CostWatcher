@@ -24,13 +24,15 @@ PRODUCT_NAMES = {
     "7g37zhparap7eesm9k78jrzqc": "Bedrock Claude Haiku",
     "9svps415mdwhhoxlp2tx3hald": "Bedrock Claude Sonnet",
 }
+FREE_TIER_REGION = "us-east-1"  # the Free Tier API has a single endpoint, whatever region the usage is in
+FREE_TIER_PACE_MIN = 4  # a pace alert waits until a quarter of the allowance is used: early-month forecasts swing wildly
 ALERT_FRESH_DAYS = 3  # a hand-run backfill of old months must not email about them
 
 
 def _client(name: str) -> Any:
     import boto3  # pyright: ignore[reportMissingImports]  # in the Lambda runtime; imported late so tests need not have it
 
-    return boto3.client(name)
+    return boto3.client(name, region_name=FREE_TIER_REGION) if name == "freetier" else boto3.client(name)
 
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -61,9 +63,91 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as error:
             print(f"Untagged summary for {month} failed: {error!r}")
             failed.append(month)
+    if "months" not in event:  # a hand-run backfill of old months has no bearing on this month's allowances
+        try:
+            sent += _free_tier(_client("freetier"), dynamodb, dt.datetime.now(dt.UTC).date())
+        except Exception as error:
+            print(f"Free tier usage failed: {error!r}")
+            failed.append("free tier")
     if failed:
-        raise RuntimeError(f"The untagged summary failed for {', '.join(failed)}; costs and alerts were written")
+        raise RuntimeError(f"The summaries failed for {', '.join(failed)}; costs and alerts were written")
     return {"written": written, "alerts": sent}
+
+
+def _free_tier(client: Any, dynamodb: Any, today: dt.date) -> list[str]:
+    """Stores this month's free-tier allowances and emails once for each that is projected to run out or already has."""
+    usages = _free_tier_usages(client)
+    dynamodb.put_item(TableName=os.environ["TABLE_NAME"], Item=_free_tier_item(today.strftime("%Y-%m"), usages))
+    return _free_tier_alerts(usages, today.strftime("%Y-%m"), dynamodb)
+
+
+def _free_tier_usages(client: Any) -> list[dict[str, Any]]:
+    """Every free-tier allowance with its usage so far and AWS's month-end forecast; allowances with no limit are skipped."""
+    usages: list[dict[str, Any]] = []
+    request: dict[str, Any] = {"maxResults": 1000}
+    while True:
+        page = client.get_free_tier_usage(**request)
+        for u in page["freeTierUsages"]:
+            limit, actual = Decimal(str(u.get("limit", 0))), Decimal(str(u.get("actualUsageAmount", 0)))
+            if not (limit.is_finite() and actual.is_finite()) or limit <= 0:
+                continue
+            forecast = Decimal(str(u.get("forecastedUsageAmount", actual)))
+            usages.append(
+                {
+                    "service": u.get("service", "unknown"),
+                    "operation": u.get("operation", ""),
+                    "usageType": u.get("usageType", ""),
+                    "region": u.get("region", ""),
+                    "unit": u.get("unit", ""),
+                    "type": u.get("freeTierType", ""),
+                    "limit": limit,
+                    "actual": actual,
+                    "forecast": max(forecast, actual) if forecast.is_finite() else actual,
+                }
+            )
+        if not page.get("nextToken"):
+            return usages
+        request["nextToken"] = page["nextToken"]
+
+
+def _free_tier_item(month: str, usages: list[dict[str, Any]]) -> dict[str, Any]:
+    """One item, rewritten daily, under its own key so `GET /costs/{month}` stays small."""
+    numbers = ("limit", "actual", "forecast")
+    return {
+        "PK": {"S": "FREETIER"},
+        "SK": {"S": "CURRENT"},
+        "month": {"S": month},
+        "usages": {
+            "L": [
+                {"M": {k: ({"N": str(v)} if k in numbers else {"S": str(v)}) for k, v in u.items()}}
+                for u in sorted(usages, key=lambda u: (-u["forecast"] / u["limit"], u["service"], u["usageType"]))
+            ]
+        },
+    }
+
+
+def _free_tier_alerts(usages: list[dict[str, Any]], month: str, dynamodb: Any) -> list[str]:
+    """One email per allowance per month and per kind: projected to run out, then already over."""
+    sent = []
+    for u in usages:
+        if u["actual"] > u["limit"]:
+            kind, subject = "over", f"{u['service']} is over its free tier"
+            detail = f"{_amount(u['actual'])} of {_amount(u['limit'])} {u['unit']} used, so usage past the limit is billed."
+        elif u["forecast"] > u["limit"] and u["actual"] * FREE_TIER_PACE_MIN >= u["limit"]:
+            kind, subject = "pace", f"{u['service']} is on pace to pass its free tier"
+            used = f"{_amount(u['actual'])} of {_amount(u['limit'])} {u['unit']} used"
+            detail = f"{used}; AWS forecasts {_amount(u['forecast'])} by month end."
+        else:
+            continue
+        message = f"{u['service']} ({u['usageType'] or u['operation']}, {u['region']}, {u['type']}): {detail}"
+        key = f"freetier#{kind}#{u['service']}#{u['usageType']}#{u['region']}"
+        if _publish_once(dynamodb, f"ALERT#{month}", analysis.Alert(key, subject, message)):
+            sent.append(key)
+    return sent
+
+
+def _amount(value: Decimal) -> str:
+    return f"{value:,.0f}" if value >= 100 else f"{value:,.2f}"
 
 
 def _name_projects(resources: list[dict[str, Any]]) -> None:
@@ -122,23 +206,26 @@ def _notify(days: dict[str, dict[str, Any]], today: dt.date, dynamodb: Any) -> l
     except Exception as error:  # a short baseline only quiets the rules; it must not lose the alerts the run can still send
         print(f"Alerting without last month's history: {error!r}")
     for alert in analysis.alerts(days, Decimal(os.environ["BUDGET_USD"])):
-        marker = {
-            "PK": {"S": "ALERT#global" if alert.key.startswith("new-service#") else f"ALERT#{month}"},
-            "SK": {"S": alert.key},
-        }
-        try:
-            dynamodb.put_item(TableName=os.environ["TABLE_NAME"], Item=marker, ConditionExpression="attribute_not_exists(SK)")
-        except Exception as error:
-            if getattr(error, "response", {}).get("Error", {}).get("Code") == "ConditionalCheckFailedException":
-                continue  # already sent
-            raise
-        try:
-            _client("sns").publish(TopicArn=os.environ["TOPIC_ARN"], Subject=alert.subject[:100], Message=alert.message)
-        except Exception:
-            dynamodb.delete_item(TableName=os.environ["TABLE_NAME"], Key=marker)  # let the next run retry
-            raise
-        sent.append(alert.key)
+        if _publish_once(dynamodb, "ALERT#global" if alert.key.startswith("new-service#") else f"ALERT#{month}", alert):
+            sent.append(alert.key)
     return sent
+
+
+def _publish_once(dynamodb: Any, partition: str, alert: analysis.Alert) -> bool:
+    """Puts the alert's marker, then publishes. False when the marker exists; the marker is released if the email fails."""
+    marker = {"PK": {"S": partition}, "SK": {"S": alert.key}}
+    try:
+        dynamodb.put_item(TableName=os.environ["TABLE_NAME"], Item=marker, ConditionExpression="attribute_not_exists(SK)")
+    except Exception as error:
+        if getattr(error, "response", {}).get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+            return False  # already sent
+        raise
+    try:
+        _client("sns").publish(TopicArn=os.environ["TOPIC_ARN"], Subject=alert.subject[:100], Message=alert.message)
+    except Exception:
+        dynamodb.delete_item(TableName=os.environ["TABLE_NAME"], Key=marker)  # let the next run retry
+        raise
+    return True
 
 
 def _digest(dynamodb: Any, today: dt.date) -> bool:

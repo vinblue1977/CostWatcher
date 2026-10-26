@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { loadDays, loadUntagged, SignedOut } from "./api";
-import type { Untagged } from "./api";
+import { loadDays, loadFreeTier, loadUntagged, SignedOut } from "./api";
+import type { FreeTier, Untagged } from "./api";
 import { handleRedirect, loadConfig, signIn, signOut } from "./auth";
 import type { Config } from "./auth";
 import { Breakdown } from "./pages/Breakdown";
+import { FreeTierPage } from "./pages/FreeTier";
 import { Overview } from "./pages/Overview";
 import { Spikes } from "./pages/Spikes";
 import { Tags } from "./pages/Tags";
@@ -21,6 +22,7 @@ const PAGES = [
   { path: "/breakdown", label: "Breakdown", icon: "M3 3h9v9H3zM14 3h5v9h-5zM3 14h5v5H3zM10 14h9v5h-9z" },
   { path: "/spikes", label: "Spikes", icon: "M2 13h4l3-8 4 12 3-4h4" },
   { path: "/tags", label: "Tags", icon: "M3 3h8l8 8-8 8-8-8zM7.5 7.5h.01" },
+  { path: "/free-tier", label: "Free tier", icon: "M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18M3.5 7.5h17M3.5 16.5h17" },
 ] as const;
 
 function usePath(): string {
@@ -81,14 +83,15 @@ export function App() {
 
 type Ready = Extract<State, { kind: "ready" }>;
 
-export function Shell({ state, path, range, setRange, loadTags }: { state: Ready; path: string; range: Range; setRange: (r: Range) => void; loadTags?: (month: string) => Promise<Untagged> }) {
+export function Shell({ state, path, range, setRange, loadTags, loadAllowances }: { state: Ready; path: string; range: Range; setRange: (r: Range) => void; loadTags?: (month: string) => Promise<Untagged>; loadAllowances?: () => Promise<FreeTier> }) {
   const page = PAGES.find((p) => p.path === path)?.path ?? "/";
   const body = useMemo(() => {
     if (page === "/breakdown") return <Breakdown days={state.days} range={range} />;
     if (page === "/spikes") return <Spikes days={state.days} />;
     if (page === "/tags") return <Tags days={state.days} load={loadTags ?? ((month) => loadUntagged(state.config, month))} />;
+    if (page === "/free-tier") return <FreeTierPage load={loadAllowances ?? (() => loadFreeTier(state.config))} />;
     return <Overview days={state.days} range={range} budget={state.config.budgetUsd} />;
-  }, [page, state, range, loadTags]);
+  }, [page, state, range, loadTags, loadAllowances]);
   return (
     <div className="shell">
       <header className="top">
@@ -111,7 +114,7 @@ export function Shell({ state, path, range, setRange, loadTags }: { state: Ready
           ))}
         </nav>
         <div className="controls">
-          {page !== "/spikes" && page !== "/tags" && (
+          {page !== "/spikes" && page !== "/tags" && page !== "/free-tier" && (
             <>
               <div role="group" aria-label="Date range" className="segmented">
                 {RANGES.map((r) => (
