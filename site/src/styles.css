@@ -183,7 +183,7 @@ td .track { display: block; }
 .allowance .who { display: flex; flex-direction: column; gap: 2px; min-width: 0; grid-column: 1; grid-row: 1; }
 .allowance .title { font-size: 14px; font-weight: 550; overflow-wrap: anywhere; }
 .allowance .sub { font-size: 12px; color: var(--faint); }
-.allowance .meter { grid-column: 2; grid-row: 1; min-width: 0; }
+.allowance .allow-meter { grid-column: 2; grid-row: 1; min-width: 0; }
 .allowance .pill { grid-column: 3; grid-row: 1; justify-self: end; }
 .gauge { position: relative; height: 8px; border-radius: 4px; background: var(--track); }
 .gauge .fill { position: absolute; inset: 0 auto 0 0; height: 100%; border-radius: 4px; }
@@ -196,5 +196,7 @@ td .track { display: block; }
 .pill.over { color: #ff7b72; background: #2d1618; border-color: #6b2a2d; }
 @media (max-width: 640px) {
   .allowance { grid-template-columns: minmax(0, 1fr) auto; }
-  .allowance .meter { grid-column: 1 / -1; grid-row: 2; }
+  .allowance .pill { grid-column: 2; }
+  .allowance .allow-meter { grid-column: 1 / -1; grid-row: 2; }
+  .nav a { padding-inline: 2px; }
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { SignedOut } from "../api";
 import type { FreeTier } from "../api";
-import { allowance, amount, daysUntilReset, friendly, monthName, runsOutOn, shortDate, sortAllowances, usageLabel } from "../model";
+import { allowance, amount, daysUntilReset, monthName, runsOutOn, shortDate, sortAllowances, usageLabel } from "../model";
 import type { Allowance, FreeTierUsage } from "../model";
 
 type Load = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; data: FreeTier };
@@ -35,19 +35,20 @@ export function FreeTierPage({ load, now = new Date() }: { load: () => Promise<F
       </p>
     );
   }
-  const { month, usages } = state.data;
-  if (!month || usages.length === 0) {
+  const { month, usages, total } = state.data;
+  if (!month || usages.length === 0 || month !== now.toISOString().slice(0, 7)) {
     return (
       <section className="panel empty">
-        <h2>No free-tier data yet</h2>
+        <h2>No free-tier data for this month yet</h2>
         <p className="muted">
-          The daily import (08:30 UTC) stores your free-tier allowances from the AWS Free Tier API. Nothing is wrong; there is just
-          nothing to show yet.
+          {month && usages.length > 0
+            ? `The last import was for ${monthName(month)}. The daily import (08:30 UTC) stores the new month's allowances; if this is still showing after a day, check the ingest alarm.`
+            : "The daily import (08:30 UTC) stores your free-tier allowances from the AWS Free Tier API. Nothing is wrong; there is just nothing to show yet."}
         </p>
       </section>
     );
   }
-  const today = month === now.toISOString().slice(0, 7) ? now.getUTCDate() : new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate();
+  const today = now.getUTCDate();
   const sorted = sortAllowances(usages);
   const over = sorted.filter((u) => allowance(u) === "over");
   const watch = sorted.filter((u) => allowance(u) === "watch");
@@ -62,7 +63,7 @@ export function FreeTierPage({ load, now = new Date() }: { load: () => Promise<F
       <div className="figures">
         <div className="card">
           <div className="label">Allowances over the limit</div>
-          <div className="value">{over.length} of {usages.length}</div>
+          <div className="value">{over.length} of {total}</div>
           <div className="sub">Billed once past the limit</div>
         </div>
         <div className={watch.length > 0 ? "card hot" : "card"}>
@@ -74,7 +75,7 @@ export function FreeTierPage({ load, now = new Date() }: { load: () => Promise<F
 
       {worst && (
         <p className="alert soft" role="status">
-          {allowanceName(worst)} {allowance(worst) === "over" ? "is over its free tier." : `is on pace to pass its free tier${soon(worst, month, today)}.`}
+          {worst.service}{allowanceName(worst) === worst.service ? "" : ` (${allowanceName(worst)})`} {allowance(worst) === "over" ? "is over its free tier." : `is on pace to pass its free tier${soon(worst, month, today)}.`}
           {over.length + watch.length > 1 && ` ${over.length + watch.length - 1} more below.`}
         </p>
       )}
@@ -88,7 +89,7 @@ export function FreeTierPage({ load, now = new Date() }: { load: () => Promise<F
         </div>
         <ul className="allowances">
           {sorted.map((u) => (
-            <Row key={`${u.service}|${u.usageType}|${u.region}`} u={u} month={month} today={today} />
+            <Row key={`${u.service}|${u.operation}|${u.usageType}|${u.region}|${u.type}`} u={u} month={month} today={today} />
           ))}
         </ul>
       </section>
@@ -97,7 +98,7 @@ export function FreeTierPage({ load, now = new Date() }: { load: () => Promise<F
 }
 
 function allowanceName(u: FreeTierUsage): string {
-  return u.usageType ? usageLabel(u.usageType) : friendly(u.service);
+  return u.usageType ? usageLabel(u.usageType) : u.service;
 }
 
 function soon(u: FreeTierUsage, month: string, today: number): string {
@@ -118,11 +119,11 @@ function Row({ u, month, today }: { u: FreeTierUsage; month: string; today: numb
       <div className="who">
         <span className="title">{allowanceName(u)}</span>
         <span className="sub">
-          {friendly(u.service)} · {u.type || "Free tier"} · {amount(u.limit)} {u.unit}
+          {u.service} · {u.type || "Free tier"} · {amount(u.limit)} {u.unit}
         </span>
       </div>
       <span className={`pill ${status}`}>{pill}</span>
-      <div className="meter">
+      <div className="allow-meter">
         <div
           className="gauge"
           role="img"

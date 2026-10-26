@@ -111,11 +111,12 @@ def test_free_tier_returns_the_stored_allowances_or_an_empty_list() -> None:
     table = FakeTable({"Items": [item]}, {"Items": []})
     assert json.loads(api._free_tier(table)["body"]) == {
         "month": "2026-10",
+        "total": 1,
         "usages": [{"service": "AWS Lambda", "limit": 1000000}],
     }
     assert table.queries[0]["ExpressionAttributeValues"] == {":pk": "FREETIER", ":sk": "CURRENT"}
     assert table.queries[0]["ConsistentRead"] is True
-    assert json.loads(api._free_tier(table)["body"]) == {"month": None, "usages": []}
+    assert json.loads(api._free_tier(table)["body"]) == {"month": None, "total": 0, "usages": []}
 
 
 def test_handler_routes_free_tier(monkeypatch: Any) -> None:

@@ -24,6 +24,7 @@ export interface Untagged {
 
 export interface FreeTier {
   month: string | null; // null before the first ingest has stored anything
+  total: number; // allowances AWS reported; `usages` holds at most the worst 200
   usages: FreeTierUsage[];
 }
 
