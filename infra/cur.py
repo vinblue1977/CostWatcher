@@ -1,4 +1,4 @@
-"""The cost data pipeline: export bucket, Athena over it, and the daily Lambda that fills the table."""
+"""The cost data pipeline: export bucket, Athena over it, and the Lambda that fills the table every 3 hours."""
 
 from aws_cdk import Aws, Duration, RemovalPolicy, Stack
 from aws_cdk import aws_athena as athena
@@ -187,11 +187,11 @@ class Cur(Construct):
             )
         )
 
-        # Once a day, after the export's usual morning refreshes.
+        # Every 3 hours: the export refreshes up to three times a day at times AWS picks, so this follows it closely.
         events.Rule(
             self,
             "Daily",
-            schedule=events.Schedule.cron(minute="30", hour="8"),
+            schedule=events.Schedule.cron(minute="30", hour="*/3"),
             targets=[targets.LambdaFunction(fn)],  # pyright: ignore[reportArgumentType]
         )
         # Sunday mornings: the same Lambda emails the weekly digest. The newest stored day is usually Saturday (the export
