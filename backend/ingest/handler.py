@@ -20,6 +20,12 @@ UNATTRIBUTED = "unattributed"
 API_STAGE = re.compile(r"(?:arn:aws:apigateway:([a-z0-9-]+)::)?/apis/([a-z0-9]+)/stages/[^/]+")
 # Marketplace products (the Anthropic models on Bedrock) are billed under an opaque 25-character code.
 OPAQUE_CODE = "^[a-z0-9]{25}$"
+# Names already stored in the history; kept so those days and their alerts don't split. Newer codes take the export's name.
+PRODUCT_NAMES = {
+    "3jkxki7g66gt6v02m7pqlqyyx": "Bedrock Claude Opus",
+    "7g37zhparap7eesm9k78jrzqc": "Bedrock Claude Haiku",
+    "9svps415mdwhhoxlp2tx3hald": "Bedrock Claude Sonnet",
+}
 FREE_TIER_REGION = "us-east-1"  # the Free Tier API has a single endpoint, whatever region the usage is in
 FREE_TIER_LISTED = 200  # rows kept, worst first, so the one item stays far under the 400 KB limit
 FREE_TIER_PACE_MIN = 4  # a pace alert waits until a quarter of the allowance is used: early-month forecasts swing wildly
@@ -285,10 +291,12 @@ def _tag_column() -> str:
 
 
 def _service_sql() -> str:
-    """The service column: the product code, or for an opaque marketplace code the product name the export carries."""
+    """The service column: the product code; an opaque marketplace code becomes its stored name or the export's product name."""
+    known = "".join(f"WHEN '{code}' THEN '{name}' " for code, name in PRODUCT_NAMES.items())
     return (
         f"CASE WHEN regexp_like(line_item_product_code, '{OPAQUE_CODE}') "
-        "THEN COALESCE(NULLIF(element_at(product, 'product_name'), ''), line_item_product_code) "
+        f"THEN CASE line_item_product_code {known}"
+        "ELSE COALESCE(NULLIF(element_at(product, 'product_name'), ''), line_item_product_code) END "
         "ELSE COALESCE(NULLIF(line_item_product_code, ''), 'unknown') END"
     )
 
