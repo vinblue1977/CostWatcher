@@ -202,14 +202,14 @@ class Cur(Construct):
             schedule=events.Schedule.cron(minute="0", hour="9", week_day="SUN"),
             targets=[targets.LambdaFunction(fn, event=events.RuleTargetInput.from_object({"digest": True}))],  # pyright: ignore[reportArgumentType]
         )
-        # A failed run leaves the dashboard a day stale, so one failure emails the alert topic.
+        # A failed run leaves the dashboard a few hours stale, so one failure emails the alert topic.
         fn.metric_errors(period=Duration.hours(1)).create_alarm(
             self,
             "IngestErrors",
             threshold=1,
             evaluation_periods=1,
             treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
-            alarm_description="The daily cost ingest failed",
+            alarm_description="The cost ingest failed",
         ).add_alarm_action(cw_actions.SnsAction(topic))  # pyright: ignore[reportArgumentType]
 
         NagSuppressions.add_resource_suppressions(
