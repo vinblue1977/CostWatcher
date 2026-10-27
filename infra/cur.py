@@ -32,6 +32,7 @@ COLUMNS = (
     ("line_item_line_item_type", "string"),
     ("line_item_unblended_cost", "double"),
     ("resource_tags", "map<string,string>"),
+    ("product", "map<string,string>"),  # product_name names the opaque marketplace codes
 )
 QUERY = f"SELECT {', '.join(name for name, _ in COLUMNS)} FROM COST_AND_USAGE_REPORT"  # noqa: S608  # constants
 

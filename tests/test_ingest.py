@@ -387,17 +387,11 @@ def test_untagged_queries_stop_before_the_lambda_does() -> None:
         ingest._spare_seconds(Context(15_000))
 
 
-def test_known_marketplace_product_codes_are_named() -> None:
+def test_opaque_marketplace_codes_take_the_product_name() -> None:
     for sql in (ingest._sql("2026-10"), ingest._untagged_sql("2026-10")):
-        assert "WHEN '3jkxki7g66gt6v02m7pqlqyyx' THEN 'Bedrock Claude Opus'" in sql
-        assert "WHEN '7g37zhparap7eesm9k78jrzqc' THEN 'Bedrock Claude Haiku'" in sql
-        assert "WHEN '9svps415mdwhhoxlp2tx3hald' THEN 'Bedrock Claude Sonnet'" in sql
+        assert "regexp_like(line_item_product_code, '^[a-z0-9]{25}$')" in sql
+        assert "THEN COALESCE(NULLIF(element_at(product, 'product_name'), ''), line_item_product_code)" in sql
         assert "ELSE COALESCE(NULLIF(line_item_product_code, ''), 'unknown') END AS service" in sql
-
-
-def test_names_with_quotes_are_escaped_in_the_service_expression(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(ingest, "PRODUCT_NAMES", {"x'y": "Sonnet's"})
-    assert "WHEN 'x''y' THEN 'Sonnet''s'" in ingest._service_sql()
 
 
 STAGE = "arn:aws:apigateway:us-east-2::/apis/4u2uhqbi7e/stages/$default"  # as the export names an HTTP API stage

@@ -18,12 +18,8 @@ UNTAGGED_LISTED = 25  # resources kept per month; the rest are counted and summe
 UNATTRIBUTED = "unattributed"
 # An HTTP API stage's resource ID is an ARN ending /apis/<id>/stages/<stage>: opaque, so its project is looked up.
 API_STAGE = re.compile(r"(?:arn:aws:apigateway:([a-z0-9-]+)::)?/apis/([a-z0-9]+)/stages/[^/]+")
-# Bedrock bills the Anthropic models under marketplace product codes; show names instead.
-PRODUCT_NAMES = {
-    "3jkxki7g66gt6v02m7pqlqyyx": "Bedrock Claude Opus",
-    "7g37zhparap7eesm9k78jrzqc": "Bedrock Claude Haiku",
-    "9svps415mdwhhoxlp2tx3hald": "Bedrock Claude Sonnet",
-}
+# Marketplace products (the Anthropic models on Bedrock) are billed under an opaque 25-character code.
+OPAQUE_CODE = "^[a-z0-9]{25}$"
 FREE_TIER_REGION = "us-east-1"  # the Free Tier API has a single endpoint, whatever region the usage is in
 FREE_TIER_LISTED = 200  # rows kept, worst first, so the one item stays far under the 400 KB limit
 FREE_TIER_PACE_MIN = 4  # a pace alert waits until a quarter of the allowance is used: early-month forecasts swing wildly
@@ -288,14 +284,13 @@ def _tag_column() -> str:
     return f"user_{key}"
 
 
-def _quote(value: str) -> str:
-    return value.replace("'", "''")
-
-
 def _service_sql() -> str:
-    """The service column: the product code, with known marketplace codes replaced by their names."""
-    cases = "".join(f"WHEN '{_quote(code)}' THEN '{_quote(name)}' " for code, name in PRODUCT_NAMES.items())
-    return f"CASE line_item_product_code {cases}ELSE COALESCE(NULLIF(line_item_product_code, ''), 'unknown') END"
+    """The service column: the product code, or for an opaque marketplace code the product name the export carries."""
+    return (
+        f"CASE WHEN regexp_like(line_item_product_code, '{OPAQUE_CODE}') "
+        "THEN COALESCE(NULLIF(element_at(product, 'product_name'), ''), line_item_product_code) "
+        "ELSE COALESCE(NULLIF(line_item_product_code, ''), 'unknown') END"
+    )
 
 
 def _sql(month: str) -> str:
