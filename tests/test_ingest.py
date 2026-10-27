@@ -396,7 +396,8 @@ def test_known_marketplace_codes_keep_their_stored_names() -> None:
 def test_opaque_marketplace_codes_take_the_product_name() -> None:
     for sql in (ingest._sql("2026-10"), ingest._untagged_sql("2026-10")):
         assert "regexp_like(line_item_product_code, '^[a-z0-9]{25}$')" in sql
-        assert "ELSE COALESCE(NULLIF(element_at(product, 'product_name'), ''), line_item_product_code) END" in sql
+        assert "ELSE COALESCE(NULLIF(element_at(product, 'product_name'), ''), " in sql
+        assert "NULLIF(element_at(product, 'model'), ''), line_item_product_code) END" in sql
         assert "ELSE COALESCE(NULLIF(line_item_product_code, ''), 'unknown') END AS service" in sql
 
 

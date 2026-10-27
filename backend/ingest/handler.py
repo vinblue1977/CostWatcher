@@ -296,7 +296,8 @@ def _service_sql() -> str:
     return (
         f"CASE WHEN regexp_like(line_item_product_code, '{OPAQUE_CODE}') "
         f"THEN CASE line_item_product_code {known}"
-        "ELSE COALESCE(NULLIF(element_at(product, 'product_name'), ''), line_item_product_code) END "
+        "ELSE COALESCE(NULLIF(element_at(product, 'product_name'), ''), NULLIF(element_at(product, 'model'), ''), "
+        "line_item_product_code) END "
         "ELSE COALESCE(NULLIF(line_item_product_code, ''), 'unknown') END"
     )
 
