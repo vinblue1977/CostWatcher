@@ -290,9 +290,13 @@ def _tag_column() -> str:
     return f"user_{key}"
 
 
+def _quote(value: str) -> str:
+    return value.replace("'", "''")
+
+
 def _service_sql() -> str:
     """The service column: the product code; an opaque marketplace code becomes its stored name or the export's product name."""
-    known = "".join(f"WHEN '{code}' THEN '{name}' " for code, name in PRODUCT_NAMES.items())
+    known = "".join(f"WHEN '{_quote(code)}' THEN '{_quote(name)}' " for code, name in PRODUCT_NAMES.items())
     return (
         f"CASE WHEN regexp_like(line_item_product_code, '{OPAQUE_CODE}') "
         f"THEN CASE line_item_product_code {known}"

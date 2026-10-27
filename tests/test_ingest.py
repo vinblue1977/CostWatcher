@@ -393,6 +393,11 @@ def test_known_marketplace_codes_keep_their_stored_names() -> None:
     assert "WHEN '3jkxki7g66gt6v02m7pqlqyyx' THEN 'Bedrock Claude Opus'" in sql
 
 
+def test_names_with_quotes_are_escaped_in_the_service_expression(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ingest, "PRODUCT_NAMES", {"x'y": "Sonnet's"})
+    assert "WHEN 'x''y' THEN 'Sonnet''s'" in ingest._service_sql()
+
+
 def test_opaque_marketplace_codes_take_the_product_name() -> None:
     for sql in (ingest._sql("2026-10"), ingest._untagged_sql("2026-10")):
         assert "regexp_like(line_item_product_code, '^[a-z0-9]{25}$')" in sql
