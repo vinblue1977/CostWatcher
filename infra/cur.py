@@ -1,4 +1,4 @@
-"""The cost data pipeline: export bucket, Athena over it, and the daily Lambda that fills the table."""
+"""The cost data pipeline: export bucket, Athena over it, and the Lambda that fills the table every 3 hours."""
 
 from aws_cdk import Aws, Duration, RemovalPolicy, Stack
 from aws_cdk import aws_athena as athena
@@ -187,11 +187,11 @@ class Cur(Construct):
             )
         )
 
-        # Once a day, after the export's usual morning refreshes.
+        # Every 3 hours: the export refreshes up to three times a day at times AWS picks, so this follows it closely.
         events.Rule(
             self,
             "Daily",
-            schedule=events.Schedule.cron(minute="30", hour="8"),
+            schedule=events.Schedule.cron(minute="30", hour="*/3"),
             targets=[targets.LambdaFunction(fn)],  # pyright: ignore[reportArgumentType]
         )
         # Sunday mornings: the same Lambda emails the weekly digest. The newest stored day is usually Saturday (the export
@@ -202,14 +202,14 @@ class Cur(Construct):
             schedule=events.Schedule.cron(minute="0", hour="9", week_day="SUN"),
             targets=[targets.LambdaFunction(fn, event=events.RuleTargetInput.from_object({"digest": True}))],  # pyright: ignore[reportArgumentType]
         )
-        # A failed run leaves the dashboard a day stale, so one failure emails the alert topic.
+        # A failed run leaves the dashboard a few hours stale, so one failure emails the alert topic.
         fn.metric_errors(period=Duration.hours(1)).create_alarm(
             self,
             "IngestErrors",
             threshold=1,
             evaluation_periods=1,
             treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
-            alarm_description="The daily cost ingest failed",
+            alarm_description="The cost ingest failed",
         ).add_alarm_action(cw_actions.SnsAction(topic))  # pyright: ignore[reportArgumentType]
 
         NagSuppressions.add_resource_suppressions(

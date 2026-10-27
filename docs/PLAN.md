@@ -9,7 +9,7 @@ Mirrors the sibling repos `Stocks` and `TennisTracker`, so their CI, deploy and 
 ## Data flow
 ```
 Data Exports (CUR 2.0, Parquet, daily, resource IDs) --> S3 (us-east-1)
-EventBridge (daily) --> Lambda --> Athena (partition projection, no crawler)
+EventBridge (every 3 hours) --> Lambda --> Athena (partition projection, no crawler)
                                       |
                                       v
                            DynamoDB (daily aggregates)

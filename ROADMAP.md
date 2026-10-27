@@ -54,3 +54,9 @@ Ideas and bugs found while building CostWatcher. The phased build plan is in [do
 - **Free tier alerts fire once per allowance per month and kind** (on pace, then over). The page shows the first of several allowances in its banner only; the rest are in the list below it.
 - **The Free tier page is untested with real data in a browser.** It was built from the approved mockup and unit-tested on the model only. The mockup's "cost past the free tier" card is not built: the API reports usage, not dollars.
 - **Bedrock models show as opaque product codes.** The Anthropic models on Bedrock are billed under marketplace codes in `line_item_product_code`. `PRODUCT_NAMES` in `backend/ingest/handler.py` maps the three seen so far (Opus, Haiku, Sonnet 4.5); any other model shows its raw code until it is added. The lasting fix is to add `product_product_name` to the export columns (an export and Glue table change) and use it in the service expression.
+
+## Found while moving the ingest to every 3 hours (#42)
+
+- **Alerts can fire on a half-finished day.** Each alert is sent once (marker item), and the ingest now runs 8 times a day, so a spike or budget alert could fire on figures a later export refresh revises down. Consider alerting only on days before today, or holding the newest day back.
+- **Skip unchanged exports.** Most runs re-query Athena and rewrite identical items; checking the export's newest object time first would skip them. Cost is well under a cent a month, so this is low priority.
+- **Rename the `Daily` rule ID** in `infra/cur.py` (it replaces the rule on deploy, so do it with another infra change).

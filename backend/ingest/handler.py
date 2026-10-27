@@ -122,7 +122,7 @@ def _free_tier_usages(client: Any) -> list[dict[str, Any]]:
 
 
 def _free_tier_item(month: str, usages: list[dict[str, Any]]) -> dict[str, Any]:
-    """One item, rewritten daily, under its own key so `GET /costs/{month}` stays small."""
+    """One item, rewritten on every run, under its own key so `GET /costs/{month}` stays small."""
     numbers = ("limit", "actual", "forecast")
     ordered = sorted(usages, key=lambda u: (-u["forecast"] / u["limit"], u["service"], u["usageType"]))[:FREE_TIER_LISTED]
     return {

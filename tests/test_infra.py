@@ -270,9 +270,9 @@ def test_athena_is_capped_and_encrypted_and_reads_partitions_by_projection() -> 
     )
 
 
-def test_ingest_runs_daily_and_failures_email_the_alert_topic() -> None:
+def test_ingest_runs_every_3_hours_and_failures_email_the_alert_topic() -> None:
     template = _template()
-    template.has_resource_properties("AWS::Events::Rule", {"ScheduleExpression": "cron(30 8 * * ? *)"})
+    template.has_resource_properties("AWS::Events::Rule", {"ScheduleExpression": "cron(30 */3 * * ? *)"})
     template.has_resource_properties(
         "AWS::Events::Rule",
         {

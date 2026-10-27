@@ -52,7 +52,7 @@ def _costs(month: str, table: Any = None) -> dict[str, Any]:
 
 
 def _untagged(month: str, table: Any = None) -> dict[str, Any]:
-    """The month's costliest resources without a project tag (PK HYGIENE#<month>), which the ingest Lambda rewrites daily."""
+    """The month's costliest resources without a project tag (PK HYGIENE#<month>), which the ingest rewrites every run."""
     if not MONTH.fullmatch(month):
         return _json(400, {"error": "month must look like 2026-10"})
     table = table or _days_table()
@@ -74,7 +74,7 @@ def _untagged(month: str, table: Any = None) -> dict[str, Any]:
 
 
 def _free_tier(table: Any = None) -> dict[str, Any]:
-    """This month's free-tier allowances (PK FREETIER), which the ingest Lambda rewrites daily."""
+    """This month's free-tier allowances (PK FREETIER), which the ingest rewrites every run."""
     table = table or _days_table()
     page = table.query(
         KeyConditionExpression="PK = :pk AND SK = :sk",
