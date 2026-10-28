@@ -130,9 +130,14 @@ describe("months", () => {
 describe("shortResource", () => {
   it("drops the partition, service, region and account from an ARN", () => {
     expect(shortResource("arn:aws:dynamodb:us-east-2:235316001927:table/Orders")).toBe("Orders");
-    expect(shortResource("arn:aws:bedrock:us-east-2:235316001927:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0")).toBe("us.anthropic.claude-haiku-4-5-20251001-v1:0");
+    expect(shortResource("arn:aws:bedrock:us-east-2:235316001927:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0")).toBe("claude-haiku-4-5-20251001-v1:0"); // the region and vendor prefix go too
     expect(shortResource("arn:aws:ec2:us-east-2:235316001927:snapshot/snap-0b83668ed568ac9b3")).toBe("snapshot/snap-0b83668ed568ac9b3"); // only table/ and inference-profile/ are dropped
     expect(shortResource("arn:aws:secretsmanager:us-east-2:235316001927:secret:google/secrets-CX4YJR")).toBe("secret:google/secrets-CX4YJR");
+  });
+  it("drops the region and vendor prefix from a bare Bedrock model ID", () => {
+    expect(shortResource("us.anthropic.claude-opus-4-5-20251101-v1:0")).toBe("claude-opus-4-5-20251101-v1:0");
+    expect(shortResource("global.anthropic.claude-sonnet-4-6-v1:0")).toBe("claude-sonnet-4-6-v1:0");
+    expect(shortResource("us.anthropic.")).toBe("us.anthropic."); // never an empty name
   });
   it("names an API stage by its project, and leaves it alone without one", () => {
     expect(shortResource("arn:aws:apigateway:us-east-2::/apis/4u2uhqbi7e/stages/$default", "portfolio-tracker")).toBe("portfolio-tracker API");

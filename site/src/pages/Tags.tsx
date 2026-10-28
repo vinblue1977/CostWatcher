@@ -117,7 +117,7 @@ function Resources({ state, retry }: { state: Load; retry: () => void }) {
   return (
     <>
       <div className="table-wrap">
-        <table>
+        <table className="resources">
           <thead>
             <tr>
               <th scope="col">Resource</th>
@@ -129,8 +129,8 @@ function Resources({ state, retry }: { state: Load; retry: () => void }) {
           <tbody>
             {resources.map((r, i) => (
               <tr key={`${i}|${r.id}`}>
-                <td className="mono" title={r.id || undefined}>{shortResource(r.id, r.project)}</td>
-                <td>{friendly(r.service)}</td>
+                <td className="mono res" title={r.id || undefined}>{shortResource(r.id, r.project)}</td>
+                <td className="svc">{friendly(r.service)}</td>
                 <td className="share-col">
                   <span className="track">
                     <span className="fill warn" style={{ width: `${Math.min(100, Math.max(0, (r.cost / denominator) * 100))}%` }} />

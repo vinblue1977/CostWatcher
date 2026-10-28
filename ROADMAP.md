@@ -68,3 +68,7 @@ Ideas and bugs found while building CostWatcher. The phased build plan is in [do
 - **Alerts can fire on a half-finished day.** Each alert is sent once (marker item), and the ingest now runs 8 times a day, so a spike or budget alert could fire on figures a later export refresh revises down. Consider alerting only on days before today, or holding the newest day back.
 - **Skip unchanged exports.** Most runs re-query Athena and rewrite identical items; checking the export's newest object time first would skip them. Cost is well under a cent a month, so this is low priority.
 - **Rename the `Daily` rule ID** in `infra/cur.py` (it replaces the rule on deploy, so do it with another infra change).
+
+## Found while stacking the untagged resource rows
+
+- **No way to see a full resource ID on iOS.** The ID's `title` tooltip needs a hover. The phone rows now wrap the whole ID, so this only matters if a very long ID still looks cut off elsewhere (the desktop table still truncates). Consider tap-to-copy.
