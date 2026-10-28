@@ -205,7 +205,7 @@ class Web(Construct):
         )
         table.grant(fn, "dynamodb:Query")  # the one call the handler makes; the ingest Lambda is the writer
         # A burst of crashes (3 in 5 minutes) emails the alert topic. No throttles alarm: nothing here reserves
-        # concurrency, so throttling would mean the whole account is saturated and other alarms would fire first.
+        # concurrency, so a throttle needs account-wide saturation, which a one-user tool can live with (see ROADMAP).
         fn.metric_errors(period=Duration.minutes(5)).create_alarm(
             self,
             "ApiErrors",
