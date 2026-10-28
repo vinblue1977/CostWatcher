@@ -258,9 +258,19 @@ export function usageLabel(name: string): string {
   return region && region !== HOME_REGION ? `${label} (${region})` : label;
 }
 
-/** An API stage with a known project reads "<project> API". An ARN without its partition, service, region and account, and without a "table/" or "inference-profile/" type prefix ("Orders"); other IDs pass through; no ID gets a label. */
+/** An API stage with a known project reads "<project> API". An ARN without its partition, service, region and account, and without a "table/" or "inference-profile/" type prefix ("Orders"); a Bedrock model ID without its "us.anthropic." region and vendor prefix; other IDs pass through; no ID gets a label. */
 export function shortResource(id: string, project?: string): string {
   if (id === "" || id.startsWith("(")) return "(no resource ID)";
+  return shortenModel(shortenArn(id, project));
+}
+
+const MODEL_PREFIX = /^[a-z]{2,6}\.anthropic\./; // "us.", "eu.", "apac.", "global." inference profiles
+
+function shortenModel(id: string): string {
+  return id.replace(MODEL_PREFIX, "") || id; // never an empty name
+}
+
+function shortenArn(id: string, project?: string): string {
   const parts = id.split(":");
   if (parts[0] !== "arn" || parts.length <= 5 || !parts[5]) return id;
   const resource = parts.slice(5).join(":");
