@@ -54,13 +54,13 @@ Ideas and bugs found while building CostWatcher. The phased build plan is in [do
 - **Free tier numbers come from AWS, unchecked.** The Free tier page and its alerts use the Free Tier API's usage, limit and forecast as given. Its forecast swings early in a month, so a "on pace to pass" email waits until a quarter of the allowance is used; tune `FREE_TIER_PACE_MIN` after a few months.
 - **Free tier alerts fire once per allowance per month and kind** (on pace, then over). The page shows the first of several allowances in its banner only; the rest are in the list below it.
 - **The Free tier page is untested with real data in a browser.** It was built from the approved mockup and unit-tested on the model only. The mockup's "cost past the free tier" card is not built: the API reports usage, not dollars.
-- **After the `product` export column deploys (#44): validate and clean up.** Opaque marketplace codes not in `PRODUCT_NAMES` take `product['product_name']`, else `product['model']`, from the export. Neither key has been seen in this account's data, and months exported before the column existed keep raw codes.
-  - [ ] Once the export re-delivers, run `SELECT DISTINCT map_keys(product) FROM costwatcher.cur` in the `costwatcher` workgroup, and check what name `7zgyu5r4uonlsrnaq20qq63eo` (Sonnet 4.6) gets. If it is still a raw code, fix the key in `_service_sql`.
+- **After the `product` export column deploys (#44): validate and clean up.** Opaque marketplace codes not in `PRODUCT_NAMES` take `product['product_name']`, else `product['model']`, from the export. Months exported before the column existed keep raw codes.
+  - [x] Verified 2026-10-28 on a probe export and then on the live table: `product_name` exists (`7zgyu5r4uonlsrnaq20qq63eo` is `Claude Sonnet 4.6 (Amazon Bedrock Edition)`). `model` was set only for some rows, so it is just the fallback.
   - [ ] Check that the `^[a-z0-9]{25}$` pattern catches every marketplace code on the bill and no native AWS code, and that two models don't merge into one name.
   - [ ] Expect at most one "billed for the first time" email per newly named model. Confirm that is all that arrives.
   - [ ] Look at the Bedrock names in the dashboard and the alert emails (commas and parentheses in free-form names).
   - [ ] Check the Athena bytes scanned per run. The whole `product` map is exported: narrow the export to the one key if Data Exports allows it.
-  - [ ] Delete the temporary `costwatcher-probe` export (`aws bcm-data-exports delete-export`, us-east-1) and the `probe/` prefix in `costwatcher-cur-<account>`.
+  - [x] Deleted the temporary `costwatcher-probe` export and its `probe/` files (2026-10-28).
   - [ ] Later, remove `PRODUCT_NAMES` once the days stored under the old names have aged out.
 
 ## Found while moving the ingest to every 3 hours (#42)
