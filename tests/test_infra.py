@@ -119,8 +119,9 @@ def test_rejects_malformed_repo() -> None:
 
 def test_api_alarms_and_budget() -> None:
     template = _template({"alertEmail": "alerts@example.com"})
-    for metric in ("Errors", "Throttles"):
-        template.has_resource_properties("AWS::CloudWatch::Alarm", {"MetricName": metric, "Threshold": 3, "Period": 300})
+    template.has_resource_properties("AWS::CloudWatch::Alarm", {"MetricName": "Errors", "Threshold": 3, "Period": 300})
+    template.has_resource_properties("AWS::CloudWatch::Alarm", {"MetricName": "Errors", "Threshold": 1, "Period": 3600})
+    assert not template.find_resources("AWS::CloudWatch::Alarm", {"Properties": {"MetricName": "Throttles"}})
     template.has_resource_properties(
         "AWS::Budgets::Budget", {"Budget": Match.object_like({"BudgetLimit": {"Amount": 5, "Unit": "USD"}})}
     )
