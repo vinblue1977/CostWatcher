@@ -16,6 +16,28 @@ def _env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ATHENA_TABLE", "cur")
     monkeypatch.setenv("BUDGET_USD", "20")
     monkeypatch.setenv("TOPIC_ARN", "arn:topic")
+    monkeypatch.setenv("BUCKET_NAME", "bkt")
+    monkeypatch.setenv("EXPORT_DATA_PREFIX", "cur/costwatcher/data")
+
+
+class FakeS3:
+    """list_objects_v2 as a paginator: one page per call, keyed by prefix."""
+
+    def __init__(self, delivered: dict[str, list[dt.datetime]] | None = None) -> None:
+        self.delivered = delivered or {}
+        self.listed: list[dict[str, Any]] = []
+
+    def get_paginator(self, name: str) -> Any:
+        assert name == "list_objects_v2"
+        outer = self
+
+        class Paginator:
+            def paginate(self, **kwargs: Any) -> list[dict[str, Any]]:
+                outer.listed.append(kwargs)
+                stamps = outer.delivered.get(kwargs["Prefix"], [])
+                return [{"Contents": [{"LastModified": s} for s in stamps]}] if stamps else [{}]
+
+        return Paginator()
 
 
 class FakeAthena:
@@ -621,7 +643,13 @@ def test_a_failed_free_tier_lookup_still_writes_costs_then_fails_the_run(monkeyp
         def get_free_tier_usage(self, **kwargs: Any) -> None:
             raise RuntimeError("denied")
 
-    clients: dict[str, Any] = {"athena": DailyAndUntaggedAthena(), "dynamodb": Dynamo(), "freetier": Broken(), "sns": object()}
+    clients: dict[str, Any] = {
+        "athena": DailyAndUntaggedAthena(),
+        "dynamodb": Dynamo(),
+        "freetier": Broken(),
+        "sns": object(),
+        "s3": FakeS3(),
+    }
     monkeypatch.setattr(ingest, "_client", lambda name: clients[name])
     monkeypatch.setattr(ingest, "_notify", lambda *args: [])
     with pytest.raises(RuntimeError, match="summaries failed for free tier"):
@@ -655,3 +683,44 @@ def test_allowances_that_differ_only_by_type_alert_separately(monkeypatch: pytes
     a = _usage(actualUsageAmount=2000000.0, freeTierType="Always Free")
     b = _usage(actualUsageAmount=2000000.0, freeTierType="12 Months Free")
     assert len(ingest._free_tier_alerts(ingest._free_tier_usages(FakeFreeTier([a, b])), "2026-10", Marker())) == 2
+
+
+def test_freshness_stores_the_newest_export_file_time_and_the_run_time() -> None:
+    early, late = dt.datetime(2026, 10, 27, 8, 0, tzinfo=dt.UTC), dt.datetime(2026, 10, 28, 8, 26, 15, tzinfo=dt.UTC)
+    s3 = FakeS3(
+        {"cur/costwatcher/data/BILLING_PERIOD=2026-10/": [early, late], "cur/costwatcher/data/BILLING_PERIOD=2026-09/": [early]}
+    )
+    dynamo = Marker()
+    ingest._freshness(s3, dynamo, ["2026-10", "2026-09"], dt.datetime(2026, 10, 28, 12, 30, 4, tzinfo=dt.UTC))
+    assert s3.listed[0] == {"Bucket": "bkt", "Prefix": "cur/costwatcher/data/BILLING_PERIOD=2026-10/"}
+    item = next(i for i in dynamo.items if i["PK"] == {"S": "META"})
+    assert item["SK"] == {"S": "FRESHNESS"}
+    assert item["exportAt"] == {"S": "2026-10-28T08:26:15+00:00"} and item["ingestAt"] == {"S": "2026-10-28T12:30:04+00:00"}
+
+
+def test_freshness_without_an_export_file_stores_only_the_run_time() -> None:
+    dynamo = Marker()
+    ingest._freshness(FakeS3(), dynamo, ["2026-10"], dt.datetime(2026, 10, 28, 12, 30, tzinfo=dt.UTC))
+    item = next(i for i in dynamo.items if i["PK"] == {"S": "META"})
+    assert "exportAt" not in item and item["ingestAt"] == {"S": "2026-10-28T12:30:00+00:00"}
+
+
+def test_a_scheduled_run_records_freshness_but_a_hand_run_backfill_does_not(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Dynamo(Marker):
+        def query(self, **kwargs: Any) -> dict[str, Any]:
+            return {"Items": []}
+
+    clients: dict[str, Any] = {
+        "athena": DailyAndUntaggedAthena(),
+        "dynamodb": Dynamo(),
+        "freetier": FakeFreeTier([]),
+        "sns": object(),
+        "s3": FakeS3(),
+    }
+    monkeypatch.setattr(ingest, "_client", lambda name: clients[name])
+    monkeypatch.setattr(ingest, "_notify", lambda *args: [])
+    ingest.handler({}, None)
+    assert any(i["PK"] == {"S": "META"} for i in clients["dynamodb"].items)
+    clients["dynamodb"], clients["athena"] = Dynamo(), DailyAndUntaggedAthena()
+    ingest.handler({"months": ["2026-10"]}, None)
+    assert not any(i["PK"] == {"S": "META"} for i in clients["dynamodb"].items)

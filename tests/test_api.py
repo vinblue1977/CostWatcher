@@ -122,3 +122,19 @@ def test_free_tier_returns_the_stored_allowances_or_an_empty_list() -> None:
 def test_handler_routes_free_tier(monkeypatch: Any) -> None:
     monkeypatch.setattr(api, "_days_table", lambda: FakeTable({"Items": []}))
     assert api.handler(_event("GET /freetier"), None)["statusCode"] == 200
+
+
+def test_freshness_returns_the_stored_times_or_nulls() -> None:
+    item = {"PK": "META", "SK": "FRESHNESS", "exportAt": "2026-10-28T08:26:15+00:00", "ingestAt": "2026-10-28T12:30:04+00:00"}
+    table = FakeTable({"Items": [item]}, {"Items": []})
+    assert json.loads(api._freshness(table)["body"]) == {
+        "exportAt": "2026-10-28T08:26:15+00:00",
+        "ingestAt": "2026-10-28T12:30:04+00:00",
+    }
+    assert table.queries[0]["ExpressionAttributeValues"] == {":pk": "META", ":sk": "FRESHNESS"}
+    assert json.loads(api._freshness(table)["body"]) == {"exportAt": None, "ingestAt": None}
+
+
+def test_handler_routes_freshness(monkeypatch: Any) -> None:
+    monkeypatch.setattr(api, "_days_table", lambda: FakeTable({"Items": []}))
+    assert api.handler(_event("GET /freshness"), None)["statusCode"] == 200

@@ -22,6 +22,11 @@ export interface Untagged {
   otherCost: number;
 }
 
+export interface Freshness {
+  exportAt: string | null; // when AWS last delivered the export; null before the first ingest
+  ingestAt: string | null;
+}
+
 export interface FreeTier {
   month: string | null; // null before the first ingest has stored anything
   total: number; // allowances AWS reported; `usages` holds at most the worst 200
@@ -71,4 +76,11 @@ export async function loadDays(config: Config, now = new Date()): Promise<Day[] 
     month(config, token, current),
   ]);
   return [...before, ...after];
+}
+
+/** When AWS last delivered the billing export and when the ingest last ran. */
+export async function loadFreshness(config: Config): Promise<Freshness> {
+  const token = await accessToken(config);
+  if (!token) throw new SignedOut();
+  return get<Freshness>(config, token, "freshness");
 }

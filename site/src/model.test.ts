@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allowance, amount, baseline, daysUntilReset, runsOutOn, sortAllowances, drivers, forecast, friendly, inRange, isSpike, latestSpike, money, monthName, movers, previousMonth, shiftDate, shortResource, usageLabel, stack, tagCoverage, weekOverWeek } from "./model";
+import { allowance, amount, baseline, daysUntilReset, runsOutOn, sortAllowances, drivers, forecast, friendly, inRange, isSpike, latestSpike, money, monthName, movers, previousMonth, shiftDate, shortResource, ageLabel, freshLevel, usageLabel, stack, tagCoverage, weekOverWeek } from "./model";
 import type { Day, FreeTierUsage } from "./model";
 
 function day(date: string, total: number, services: Record<string, number> = { S3: total }, usageTypes: Record<string, number> = {}): Day {
@@ -208,5 +208,22 @@ describe("free tier", () => {
     expect(amount(5.8333)).toBe("5.83");
     expect(daysUntilReset(new Date("2026-10-25T10:00:00Z"))).toBe(7);
     expect(daysUntilReset(new Date("2026-10-31T23:00:00Z"))).toBe(1);
+  });
+});
+
+describe("export freshness", () => {
+  const now = new Date("2026-10-28T13:00:00Z");
+  it("is fresh under 12 hours, aging under 24, then stale", () => {
+    expect(freshLevel("2026-10-28T08:26:00Z", now)).toBe("fresh");
+    expect(freshLevel("2026-10-28T01:00:00Z", now)).toBe("aging"); // exactly 12h
+    expect(freshLevel("2026-10-27T14:00:00Z", now)).toBe("aging");
+    expect(freshLevel("2026-10-27T13:00:00Z", now)).toBe("stale"); // exactly 24h
+  });
+  it("words the age in minutes, hours, then days", () => {
+    expect(ageLabel("2026-10-28T12:18:00Z", now)).toBe("42m ago");
+    expect(ageLabel("2026-10-28T08:26:00Z", now)).toBe("4h ago");
+    expect(ageLabel("2026-10-27T05:00:00Z", now)).toBe("1 day old");
+    expect(ageLabel("2026-10-26T08:26:00Z", now)).toBe("2 days old");
+    expect(ageLabel("2026-10-28T13:00:30Z", now)).toBe("0m ago"); // a clock slightly ahead
   });
 });

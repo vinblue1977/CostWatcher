@@ -30,6 +30,8 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return _untagged((event.get("pathParameters") or {}).get("month", ""))
     if event.get("routeKey") == "GET /freetier":
         return _free_tier()
+    if event.get("routeKey") == "GET /freshness":
+        return _freshness()
     return _json(404, {"error": "not found"})
 
 
@@ -84,6 +86,18 @@ def _free_tier(table: Any = None) -> dict[str, Any]:
     item = page["Items"][0] if page["Items"] else {}
     usages = item.get("usages", [])
     return _json(200, {"month": item.get("month"), "total": item.get("total", len(usages)), "usages": usages})
+
+
+def _freshness(table: Any = None) -> dict[str, Any]:
+    """When AWS last delivered the export and when the ingest last ran (PK META), both null before the first run."""
+    table = table or _days_table()
+    page = table.query(
+        KeyConditionExpression="PK = :pk AND SK = :sk",
+        ExpressionAttributeValues={":pk": "META", ":sk": "FRESHNESS"},
+        ConsistentRead=True,
+    )
+    item = page["Items"][0] if page["Items"] else {}
+    return _json(200, {"exportAt": item.get("exportAt"), "ingestAt": item.get("ingestAt")})
 
 
 def _json(status: int, body: dict[str, Any]) -> dict[str, Any]:

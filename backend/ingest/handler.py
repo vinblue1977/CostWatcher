@@ -29,6 +29,10 @@ PRODUCT_NAMES = {
 FREE_TIER_REGION = "us-east-1"  # the Free Tier API has a single endpoint, whatever region the usage is in
 FREE_TIER_LISTED = 200  # rows kept, worst first, so the one item stays far under the 400 KB limit
 FREE_TIER_PACE_MIN = 4  # a pace alert waits until a quarter of the allowance is used: early-month forecasts swing wildly
+FRESHNESS_KEY = {
+    "PK": {"S": "META"},
+    "SK": {"S": "FRESHNESS"},
+}  # when AWS last delivered the export, and when this ingest last ran
 ALERT_FRESH_DAYS = 3  # a hand-run backfill of old months must not email about them
 
 
@@ -70,6 +74,12 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as error:
             print(f"Free tier usage failed: {error!r}")
             failed.append("free tier")
+    if "months" not in event:
+        try:
+            _freshness(_client("s3"), dynamodb, months, dt.datetime.now(dt.UTC))
+        except Exception as error:
+            print(f"Freshness failed: {error!r}")
+            failed.append("freshness")
     for month in months:
         try:
             summary = _untagged(_query(athena, _untagged_sql(month), _spare_seconds(context)))
@@ -81,6 +91,26 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     if failed:
         raise RuntimeError(f"The summaries failed for {', '.join(failed)}; costs and alerts were written")
     return {"written": written, "alerts": sent}
+
+
+def _freshness(s3: Any, dynamodb: Any, months: list[str], now: dt.datetime) -> None:
+    """Stores the newest export file's delivery time (the dashboard can only be as fresh as that) and this run's time."""
+    delivered = _export_delivered(s3, months)
+    item: dict[str, Any] = {**FRESHNESS_KEY, "ingestAt": {"S": now.isoformat(timespec="seconds")}}
+    if delivered is not None:
+        item["exportAt"] = {"S": delivered.astimezone(dt.UTC).isoformat(timespec="seconds")}
+    dynamodb.put_item(TableName=os.environ["TABLE_NAME"], Item=item)
+
+
+def _export_delivered(s3: Any, months: list[str]) -> dt.datetime | None:
+    newest: dt.datetime | None = None
+    for month in months:
+        prefix = f"{os.environ['EXPORT_DATA_PREFIX']}/BILLING_PERIOD={month}/"
+        for page in s3.get_paginator("list_objects_v2").paginate(Bucket=os.environ["BUCKET_NAME"], Prefix=prefix):
+            for obj in page.get("Contents", []):
+                if newest is None or obj["LastModified"] > newest:
+                    newest = obj["LastModified"]
+    return newest
 
 
 def _free_tier(client: Any, dynamodb: Any, today: dt.date) -> list[str]:
