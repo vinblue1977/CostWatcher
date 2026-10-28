@@ -365,3 +365,33 @@ export function daysUntilReset(now: Date): number {
   const last = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate();
   return last - now.getUTCDate() + 1;
 }
+
+export type FreshLevel = "fresh" | "aging" | "stale";
+export const AGING_HOURS = 12;
+export const STALE_HOURS = 24;
+
+/** How old the export is: under 12 hours is fresh, under 24 aging, and older stale (the export or the ingest may have stopped). */
+export function freshLevel(exportAt: string, now: Date): FreshLevel {
+  const hours = (now.getTime() - new Date(exportAt).getTime()) / 3_600_000;
+  return hours >= STALE_HOURS ? "stale" : hours >= AGING_HOURS ? "aging" : "fresh";
+}
+
+/** "42m ago", "5h ago", or for a stale export "2 days old"; a clock slightly ahead of AWS's reads "0m ago". */
+export function ageLabel(iso: string, now: Date): string {
+  const minutes = Math.max(0, Math.floor((now.getTime() - new Date(iso).getTime()) / 60_000));
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < STALE_HOURS) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} ${days === 1 ? "day" : "days"} old`;
+}
+
+/** "8:26 AM" in the viewer's time zone. */
+export function clock(iso: string): string {
+  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
+/** "Oct 28, 8:26 AM" in the viewer's time zone. */
+export function stamp(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}

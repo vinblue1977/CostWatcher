@@ -155,6 +155,8 @@ class Cur(Construct):
                 "PROJECT_TAG": project_tag,
                 "TOPIC_ARN": topic.topic_arn,
                 "BUDGET_USD": str(budget_usd),
+                "BUCKET_NAME": bucket.bucket_name,
+                "EXPORT_DATA_PREFIX": f"{EXPORT_PREFIX}/{EXPORT_NAME}/data",
             },
             log_group=logs.LogGroup(self, "IngestLogs", retention=logs.RetentionDays.TWO_WEEKS),
         )

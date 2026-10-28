@@ -21,7 +21,7 @@ Ideas and bugs found while building CostWatcher. The phased build plan is in [do
 - **Tag hygiene report.** Services with untagged spend, ranked by dollars.
 - **Push or Slack alerts.** SNS to a phone push or webhook, not just email.
 - **CSV export.** A download button on the Breakdown and Spikes pages.
-- **Data freshness badge.** When the last ingest ran and whether the latest day is partial.
+- [x] **Data freshness badge** (done): export delivery time, last ingest and a partial-day note.
 - **Month-to-date from Cost Explorer.** The export refreshes up to three times a day at times AWS picks, so the dashboard can trail the billing console (3.06 against 3.14 on 2026-10-26). One `ce:GetCostAndUsage` call a day for the month-to-date total only would close the gap for about $0.30 a month; one per 3-hour run costs about $2.40 a month, more than the rest of the pipeline. Keep the export for breakdowns (Cost Explorer lacks line-item detail), and note that the headline would then differ from the sum of the services between refreshes. A cheaper first step is labelling the dashboard with the export's delivery time (see the freshness badge).
 
 ## Bugs and risks

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { loadDays, loadFreeTier, loadUntagged, SignedOut } from "./api";
-import type { FreeTier, Untagged } from "./api";
+import { loadDays, loadFreeTier, loadFreshness, loadUntagged, SignedOut } from "./api";
+import type { FreeTier, Freshness as Times, Untagged } from "./api";
 import { handleRedirect, loadConfig, signIn, signOut } from "./auth";
 import type { Config } from "./auth";
+import { Freshness } from "./Freshness";
 import { Breakdown } from "./pages/Breakdown";
 import { FreeTierPage } from "./pages/FreeTier";
 import { Overview } from "./pages/Overview";
@@ -83,10 +84,15 @@ export function App() {
 
 type Ready = Extract<State, { kind: "ready" }>;
 
-export function Shell({ state, path, range, setRange, loadTags, loadAllowances }: { state: Ready; path: string; range: Range; setRange: (r: Range) => void; loadTags?: (month: string) => Promise<Untagged>; loadAllowances?: () => Promise<FreeTier> }) {
+export function Shell({ state, path, range, setRange, loadTags, loadAllowances, loadTimes }: { state: Ready; path: string; range: Range; setRange: (r: Range) => void; loadTags?: (month: string) => Promise<Untagged>; loadAllowances?: () => Promise<FreeTier>; loadTimes?: () => Promise<Times> }) {
   const page = PAGES.find((p) => p.path === path)?.path ?? "/";
   const config = state.config;
   const freeTier = useCallback(() => loadFreeTier(config), [config]);
+  const [times, setTimes] = useState<Times | null>(null);
+  useEffect(() => {
+    // Only a convenience: without the times the badge is simply left out.
+    (loadTimes ? loadTimes() : loadFreshness(config)).then(setTimes, () => setTimes(null));
+  }, [config, loadTimes]);
   const body = useMemo(() => {
     if (page === "/breakdown") return <Breakdown days={state.days} range={range} />;
     if (page === "/spikes") return <Spikes days={state.days} />;
@@ -116,6 +122,7 @@ export function Shell({ state, path, range, setRange, loadTags, loadAllowances }
           ))}
         </nav>
         <div className="controls">
+          <Freshness variant="pill" times={times} days={state.days} />
           {page !== "/spikes" && page !== "/tags" && page !== "/free-tier" && (
             <>
               <div role="group" aria-label="Date range" className="segmented">
@@ -140,6 +147,7 @@ export function Shell({ state, path, range, setRange, loadTags, loadAllowances }
           <button type="button" className="quiet desktop-only" onClick={() => signOut(state.config)}>Sign out</button>
         </div>
       </header>
+      <Freshness variant="strip" times={times} days={state.days} />
       <main className="page">
         {body}
         <button type="button" className="quiet phone-only" onClick={() => signOut(state.config)}>Sign out</button>
