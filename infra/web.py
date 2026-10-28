@@ -204,16 +204,16 @@ class Web(Construct):
             log_group=logs.LogGroup(self, "ApiLogs", retention=logs.RetentionDays.TWO_WEEKS),
         )
         table.grant(fn, "dynamodb:Query")  # the one call the handler makes; the ingest Lambda is the writer
-        # A burst of crashes (3 in 5 minutes) or throttled calls emails the alert topic.
-        for metric_name, metric in (("Errors", fn.metric_errors), ("Throttles", fn.metric_throttles)):
-            metric(period=Duration.minutes(5)).create_alarm(
-                self,
-                f"Api{metric_name}",
-                threshold=3,
-                evaluation_periods=1,
-                treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
-                alarm_description=f"The app's API Lambda reported {metric_name.lower()}",
-            ).add_alarm_action(cw_actions.SnsAction(topic))  # pyright: ignore[reportArgumentType]
+        # A burst of crashes (3 in 5 minutes) emails the alert topic. No throttles alarm: nothing here reserves
+        # concurrency, so throttling would mean the whole account is saturated and other alarms would fire first.
+        fn.metric_errors(period=Duration.minutes(5)).create_alarm(
+            self,
+            "ApiErrors",
+            threshold=3,
+            evaluation_periods=1,
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+            alarm_description="The app's API Lambda reported errors",
+        ).add_alarm_action(cw_actions.SnsAction(topic))  # pyright: ignore[reportArgumentType]
         api = apigw.HttpApi(
             self,
             "HttpApi",
