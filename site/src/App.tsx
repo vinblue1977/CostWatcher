@@ -90,8 +90,12 @@ export function Shell({ state, path, range, setRange, loadTags, loadAllowances, 
   const freeTier = useCallback(() => loadFreeTier(config), [config]);
   const [times, setTimes] = useState<Times | null>(null);
   useEffect(() => {
-    // Only a convenience: without the times the badge is simply left out.
-    (loadTimes ? loadTimes() : loadFreshness(config)).then(setTimes, () => setTimes(null));
+    // Only a convenience: without the times the badge is simply left out, and a failed refetch keeps the last ones.
+    let current = true;
+    (loadTimes ? loadTimes() : loadFreshness(config)).then((t) => current && setTimes(t), () => undefined);
+    return () => {
+      current = false;
+    };
   }, [config, loadTimes]);
   const body = useMemo(() => {
     if (page === "/breakdown") return <Breakdown days={state.days} range={range} />;
