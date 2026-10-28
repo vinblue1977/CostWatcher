@@ -74,12 +74,6 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as error:
             print(f"Free tier usage failed: {error!r}")
             failed.append("free tier")
-    if "months" not in event:
-        try:
-            _freshness(_client("s3"), dynamodb, months, dt.datetime.now(dt.UTC))
-        except Exception as error:
-            print(f"Freshness failed: {error!r}")
-            failed.append("freshness")
     for month in months:
         try:
             summary = _untagged(_query(athena, _untagged_sql(month), _spare_seconds(context)))
@@ -88,28 +82,36 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as error:
             print(f"Untagged summary for {month} failed: {error!r}")
             failed.append(month)
+    if "months" not in event and not failed:  # "last checked" must not advance on a run that failed part-way
+        try:
+            _freshness(_client("s3"), dynamodb, dt.datetime.now(dt.UTC))
+        except Exception as error:
+            print(f"Freshness failed: {error!r}")
+            failed.append("freshness")
     if failed:
         raise RuntimeError(f"The summaries failed for {', '.join(failed)}; costs and alerts were written")
     return {"written": written, "alerts": sent}
 
 
-def _freshness(s3: Any, dynamodb: Any, months: list[str], now: dt.datetime) -> None:
-    """Stores the newest export file's delivery time (the dashboard can only be as fresh as that) and this run's time."""
-    delivered = _export_delivered(s3, months)
+def _freshness(s3: Any, dynamodb: Any, now: dt.datetime) -> None:
+    """Stores the newest file's delivery time for this month (the dashboard can only be as fresh as that) and this run's time.
+
+    Only the current month counts: before its first file arrives, last month's delivery would pass for a fresh one.
+    """
+    delivered = _export_delivered(s3, now.strftime("%Y-%m"))
     item: dict[str, Any] = {**FRESHNESS_KEY, "ingestAt": {"S": now.isoformat(timespec="seconds")}}
     if delivered is not None:
         item["exportAt"] = {"S": delivered.astimezone(dt.UTC).isoformat(timespec="seconds")}
     dynamodb.put_item(TableName=os.environ["TABLE_NAME"], Item=item)
 
 
-def _export_delivered(s3: Any, months: list[str]) -> dt.datetime | None:
+def _export_delivered(s3: Any, month: str) -> dt.datetime | None:
     newest: dt.datetime | None = None
-    for month in months:
-        prefix = f"{os.environ['EXPORT_DATA_PREFIX']}/BILLING_PERIOD={month}/"
-        for page in s3.get_paginator("list_objects_v2").paginate(Bucket=os.environ["BUCKET_NAME"], Prefix=prefix):
-            for obj in page.get("Contents", []):
-                if newest is None or obj["LastModified"] > newest:
-                    newest = obj["LastModified"]
+    prefix = f"{os.environ['EXPORT_DATA_PREFIX']}/BILLING_PERIOD={month}/"
+    for page in s3.get_paginator("list_objects_v2").paginate(Bucket=os.environ["BUCKET_NAME"], Prefix=prefix):
+        for obj in page.get("Contents", []):
+            if newest is None or obj["LastModified"] > newest:
+                newest = obj["LastModified"]
     return newest
 
 

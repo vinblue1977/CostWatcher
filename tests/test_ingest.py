@@ -691,7 +691,7 @@ def test_freshness_stores_the_newest_export_file_time_and_the_run_time() -> None
         {"cur/costwatcher/data/BILLING_PERIOD=2026-10/": [early, late], "cur/costwatcher/data/BILLING_PERIOD=2026-09/": [early]}
     )
     dynamo = Marker()
-    ingest._freshness(s3, dynamo, ["2026-10", "2026-09"], dt.datetime(2026, 10, 28, 12, 30, 4, tzinfo=dt.UTC))
+    ingest._freshness(s3, dynamo, dt.datetime(2026, 10, 28, 12, 30, 4, tzinfo=dt.UTC))
     assert s3.listed[0] == {"Bucket": "bkt", "Prefix": "cur/costwatcher/data/BILLING_PERIOD=2026-10/"}
     item = next(i for i in dynamo.items if i["PK"] == {"S": "META"})
     assert item["SK"] == {"S": "FRESHNESS"}
@@ -700,7 +700,7 @@ def test_freshness_stores_the_newest_export_file_time_and_the_run_time() -> None
 
 def test_freshness_without_an_export_file_stores_only_the_run_time() -> None:
     dynamo = Marker()
-    ingest._freshness(FakeS3(), dynamo, ["2026-10"], dt.datetime(2026, 10, 28, 12, 30, tzinfo=dt.UTC))
+    ingest._freshness(FakeS3(), dynamo, dt.datetime(2026, 10, 28, 12, 30, tzinfo=dt.UTC))
     item = next(i for i in dynamo.items if i["PK"] == {"S": "META"})
     assert "exportAt" not in item and item["ingestAt"] == {"S": "2026-10-28T12:30:00+00:00"}
 
@@ -724,3 +724,25 @@ def test_a_scheduled_run_records_freshness_but_a_hand_run_backfill_does_not(monk
     clients["dynamodb"], clients["athena"] = Dynamo(), DailyAndUntaggedAthena()
     ingest.handler({"months": ["2026-10"]}, None)
     assert not any(i["PK"] == {"S": "META"} for i in clients["dynamodb"].items)
+
+
+def test_a_run_that_fails_part_way_does_not_advance_last_checked(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Athena(DailyAndUntaggedAthena):
+        def get_query_execution(self, **kwargs: Any) -> dict[str, Any]:
+            if "HAVING" in self.started[-1]["QueryString"]:
+                return {"QueryExecution": {"Status": {"State": "FAILED", "StateChangeReason": "boom"}}}
+            return super().get_query_execution(**kwargs)
+
+    dynamo = Marker()
+    clients: dict[str, Any] = {
+        "athena": Athena(),
+        "dynamodb": dynamo,
+        "freetier": FakeFreeTier([]),
+        "sns": object(),
+        "s3": FakeS3(),
+    }
+    monkeypatch.setattr(ingest, "_client", lambda name: clients[name])
+    monkeypatch.setattr(ingest, "_notify", lambda *args: [])
+    with pytest.raises(RuntimeError, match="summaries failed"):
+        ingest.handler({}, None)
+    assert not any(i["PK"] == {"S": "META"} for i in dynamo.items)
