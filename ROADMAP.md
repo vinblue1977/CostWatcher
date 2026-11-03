@@ -75,3 +75,7 @@ Ideas and bugs found while building CostWatcher. The phased build plan is in [do
 - **No way to see a full resource ID on iOS.** The ID's `title` tooltip needs a hover, and the phone rows show `shortResource`'s shortened ID, not the full one. Consider tap-to-copy the full ID.
 - **Stripped Bedrock prefix hides the region.** `us.anthropic.claude-sonnet-4-6-v1:0` and `global.anthropic.…` both read `claude-sonnet-4-6-v1:0` but bill separately. Consider keeping the region, e.g. `claude-sonnet-4-6-v1:0 (us)`. The prefix match also skips `us-gov.` and non-Anthropic profiles.
 - **Phone table semantics.** `display: grid/block` on the Resources table's rows and cells can drop table semantics in VoiceOver, and the DOM order (ID first) differs from the visual order. Add explicit `role`s or render a list on phones.
+
+## Found while checking the Dependabot PRs
+
+- **Ingest tests depend on the clock.** `ingest.handler` reads `dt.datetime.now(dt.UTC)`, so tests that call it with `{}` read two months in the first days of a month and one month otherwise. The fake Athena had states for one month only, so CI failed from Nov 1 until fixed. Consider injecting the date so tests never depend on the real clock.
