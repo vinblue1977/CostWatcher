@@ -67,10 +67,13 @@ HEADER = ["day", "service", "usage_type", "project", "cost"]
 
 
 class DailyAndUntaggedAthena(FakeAthena):
-    """Answers the daily query and then the untagged one, as the handler sends them for each month."""
+    """Answers the daily query and then the untagged one, as the handler sends them for each month.
+
+    Early in a month the handler reads two months, so supply states for both (extra ones are harmless).
+    """
 
     def __init__(self) -> None:
-        super().__init__("SUCCEEDED", "SUCCEEDED", pages=[])
+        super().__init__(*["SUCCEEDED"] * 4, pages=[])
 
     def start_query_execution(self, **kwargs: Any) -> dict[str, str]:
         daily = [HEADER, ["2026-10-01", "AmazonS3", "Storage", "web", "2"]]
