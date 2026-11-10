@@ -1,0 +1,50 @@
+name: Dependabot auto-merge
+
+# Merges made with GITHUB_TOKEN don't start the push run on main, so the deploy would be skipped. Both jobs
+# therefore use a personal access token (secret AUTO_MERGE_TOKEN: fine-grained, this repo only, Contents and
+# Pull requests read/write) so the merge counts as a user's and CI deploys.
+#
+# Auto-merge still waits for every required check; it only saves running `gh pr merge --auto --squash` by hand.
+# Runs started by Dependabot can't read Actions secrets, so store AUTO_MERGE_TOKEN twice: as an Actions secret
+# (the push job) and as a Dependabot secret (the PR job): `gh secret set AUTO_MERGE_TOKEN [--app dependabot]`.
+# Plain pull_request, not pull_request_target (zizmor rejects it); nothing here checks out PR code.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+  push:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  enable:
+    # Dependabot's numeric account id (49699333): a login name can be spoofed, the id can't. If a human pushes to the
+    # branch the run loses the Dependabot secret, so the token guard below fails the job instead of merging.
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.id == 49699333
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Enable squash auto-merge
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "::error::Secret AUTO_MERGE_TOKEN is not set; merge this PR by hand."; exit 1; fi
+          gh pr merge --auto --squash "$PR_URL"
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+
+  # Branch protection needs PRs up to date, so after each merge bring the other open Dependabot PRs level with main.
+  update-branches:
+    if: github.event_name == 'push'
+    concurrency: dependabot-update-branches  # one at a time; a newer run waits instead of racing
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Update open Dependabot PRs
+        run: |
+          set -euo pipefail  # a failed list (bad token, rate limit) fails the job instead of passing silently
+          for n in $(gh pr list --repo "$REPO" --author 'app/dependabot' --state open --json number --jq '.[].number'); do
+            gh pr update-branch "$n" --repo "$REPO" || echo "::warning::PR $n not updated"
+          done
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN }}
+          REPO: ${{ github.repository }}
