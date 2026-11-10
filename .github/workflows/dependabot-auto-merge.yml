@@ -18,10 +18,9 @@ permissions: {}
 
 jobs:
   enable:
-    # Author and actor both: a human pushing to a Dependabot branch changes the actor, not the author.
-    if: >-
-      github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
-      && github.event.pull_request.user.login == 'dependabot[bot]'
+    # Dependabot's numeric account id (49699333): a login name can be spoofed, the id can't. If a human pushes to the
+    # branch the run loses the Dependabot secret, so the token guard below fails the job instead of merging.
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.id == 49699333
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
