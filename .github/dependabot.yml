@@ -14,6 +14,9 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+    ignore:  # majors are reviewed by hand, since patch and minor bumps auto-merge
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   # The CDK app and dev tools (requirements*.in; hashed lockfiles beside them).
   - package-ecosystem: pip
     directory: /
@@ -31,6 +34,8 @@ updates:
       # cdk-nag 3 replaces the suppression API (experimental, no grouped acknowledgments yet).
       - dependency-name: cdk-nag
         versions: [">=3.0.0"]
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   # The CDK CLI that deploys and pyright (package.json).
   - package-ecosystem: npm
     directory: /

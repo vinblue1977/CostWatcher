@@ -16,12 +16,17 @@ permissions: {}
 
 jobs:
   enable:
-    if: github.event_name == 'pull_request_target' && github.event.pull_request.user.login == 'dependabot[bot]'
+    # Author and actor both: a human pushing to a Dependabot branch changes the actor, not the author.
+    if: >-
+      github.event_name == 'pull_request_target' && github.actor == 'dependabot[bot]'
+      && github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
       - name: Enable squash auto-merge
-        run: gh pr merge --auto --squash "$PR_URL"
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "::error::Secret AUTO_MERGE_TOKEN is not set; merge this PR by hand."; exit 1; fi
+          gh pr merge --auto --squash "$PR_URL"
         env:
           GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
@@ -29,13 +34,16 @@ jobs:
   # Branch protection needs PRs up to date, so after each merge bring the other open Dependabot PRs level with main.
   update-branches:
     if: github.event_name == 'push'
+    concurrency: dependabot-update-branches  # one at a time; a newer run waits instead of racing
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Update open Dependabot PRs
         run: |
-          gh pr list --repo "$REPO" --author 'app/dependabot' --state open --json number --jq '.[].number' |
-            while read -r n; do gh pr update-branch "$n" --repo "$REPO" || echo "::warning::PR $n not updated"; done
+          set -euo pipefail  # a failed list (bad token, rate limit) fails the job instead of passing silently
+          for n in $(gh pr list --repo "$REPO" --author 'app/dependabot' --state open --json number --jq '.[].number'); do
+            gh pr update-branch "$n" --repo "$REPO" || echo "::warning::PR $n not updated"
+          done
         env:
           GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN }}
           REPO: ${{ github.repository }}
