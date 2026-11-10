@@ -1,0 +1,41 @@
+name: Dependabot auto-merge
+
+# Merges made with GITHUB_TOKEN don't start the push run on main, so the deploy would be skipped. Both jobs
+# therefore use a personal access token (secret AUTO_MERGE_TOKEN: fine-grained, this repo only, Contents and
+# Pull requests read/write) so the merge counts as a user's and CI deploys.
+#
+# Auto-merge still waits for every required check; it only saves running `gh pr merge --auto --squash` by hand.
+# pull_request_target runs the workflow from main and nothing here checks out PR code.
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+  push:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  enable:
+    if: github.event_name == 'pull_request_target' && github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Enable squash auto-merge
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+
+  # Branch protection needs PRs up to date, so after each merge bring the other open Dependabot PRs level with main.
+  update-branches:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Update open Dependabot PRs
+        run: |
+          gh pr list --repo "$REPO" --author 'app/dependabot' --state open --json number --jq '.[].number' |
+            while read -r n; do gh pr update-branch "$n" --repo "$REPO" || echo "::warning::PR $n not updated"; done
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN }}
+          REPO: ${{ github.repository }}

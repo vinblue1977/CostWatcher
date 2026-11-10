@@ -26,6 +26,7 @@ Ideas and bugs found while building CostWatcher. The phased build plan is in [do
 
 ## Bugs and risks
 
+- **Dependabot auto-merge needs a secret.** `.github/workflows/dependabot-auto-merge.yml` uses a PAT in `AUTO_MERGE_TOKEN`; it does nothing useful until the secret exists. A pip major bump can auto-merge if CI passes (only npm ignores majors in `dependabot.yml`).
 - **No throttles alarm on the API Lambda.** Dropped to cut alarm count; throttles don't count as `Errors`, so a throttled API stays silent. Bring `ApiThrottles` back if reserved concurrency is ever added.
 - **Alert thresholds are constants.** Spike (2x the 7-day average and over $0.50), service rise (1.5x and over $1) and the new-service rule live in `backend/ingest/analysis.py`; tune them after a few weeks of real data. Every rule stays silent until 7 days of history exist.
 - **A "new service" alert fires once per service, ever.** Its marker item is never cleared, so a service that goes quiet and returns won't alert again.
