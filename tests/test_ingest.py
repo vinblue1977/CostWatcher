@@ -701,6 +701,65 @@ def test_freshness_stores_the_newest_export_file_time_and_the_run_time() -> None
     assert item["exportAt"] == {"S": "2026-10-28T08:26:15+00:00"} and item["ingestAt"] == {"S": "2026-10-28T12:30:04+00:00"}
 
 
+def _sns_sent(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    sent: list[str] = []
+    monkeypatch.setattr(
+        ingest, "_client", lambda name: type("Sns", (), {"publish": lambda self, **k: sent.append(k["Subject"])})()
+    )
+    return sent
+
+
+def _export_files(month: str, *times: dt.datetime) -> FakeS3:
+    return FakeS3({f"cur/costwatcher/data/BILLING_PERIOD={month}/": list(times)})
+
+
+def test_a_stalled_export_emails_once_per_stalled_delivery(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent = _sns_sent(monkeypatch)
+    s3, dynamo = _export_files("2026-11", dt.datetime(2026, 11, 13, 12, 8, tzinfo=dt.UTC)), Marker()
+    assert ingest._alert_stale_export(s3, dynamo, dt.datetime(2026, 11, 17, 12, 30, tzinfo=dt.UTC))
+    assert not ingest._alert_stale_export(s3, dynamo, dt.datetime(2026, 11, 17, 15, 30, tzinfo=dt.UTC))  # no repeat
+    assert sent == ["CostWatcher: billing export is 4 days old"]
+
+
+def test_the_stale_export_threshold_is_48_hours(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent = _sns_sent(monkeypatch)
+    delivered = dt.datetime(2026, 11, 15, 12, 0, tzinfo=dt.UTC)
+    s3 = _export_files("2026-11", delivered)
+    assert not ingest._alert_stale_export(s3, Marker(), delivered + dt.timedelta(hours=47, minutes=59))
+    assert ingest._alert_stale_export(s3, Marker(), delivered + dt.timedelta(hours=48))
+    assert sent == ["CostWatcher: billing export is 2 days old"]
+
+
+def test_a_stall_across_a_month_boundary_still_alerts(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent = _sns_sent(monkeypatch)
+    s3 = _export_files("2026-10", dt.datetime(2026, 10, 30, 12, 0, tzinfo=dt.UTC))  # nothing yet under 2026-11
+    assert ingest._alert_stale_export(s3, Marker(), dt.datetime(2026, 11, 2, 12, 30, tzinfo=dt.UTC))
+    assert sent == ["CostWatcher: billing export is 3 days old"]
+
+
+def test_no_export_files_at_all_sends_no_email(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent = _sns_sent(monkeypatch)
+    assert not ingest._alert_stale_export(FakeS3(), Marker(), dt.datetime(2026, 11, 17, 12, 30, tzinfo=dt.UTC))
+    assert sent == []
+
+
+def test_a_failed_stale_alert_releases_its_marker_so_the_next_run_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Sns:
+        def publish(self, **kwargs: Any) -> None:
+            raise RuntimeError("sns down")
+
+    class Dynamo(Marker):
+        def delete_item(self, **kwargs: Any) -> None:
+            self.items = [i for i in self.items if {k: i[k] for k in kwargs["Key"]} != kwargs["Key"]]
+
+    monkeypatch.setattr(ingest, "_client", lambda name: Sns())
+    dynamo = Dynamo()
+    s3 = _export_files("2026-11", dt.datetime(2026, 11, 13, 12, 8, tzinfo=dt.UTC))
+    with pytest.raises(RuntimeError, match="sns down"):
+        ingest._alert_stale_export(s3, dynamo, dt.datetime(2026, 11, 17, 12, 30, tzinfo=dt.UTC))
+    assert not any(i["PK"] == {"S": "ALERT#export"} for i in dynamo.items)
+
+
 def test_freshness_without_an_export_file_stores_only_the_run_time() -> None:
     dynamo = Marker()
     ingest._freshness(FakeS3(), dynamo, dt.datetime(2026, 10, 28, 12, 30, tzinfo=dt.UTC))

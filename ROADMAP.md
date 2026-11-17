@@ -80,3 +80,8 @@ Ideas and bugs found while building CostWatcher. The phased build plan is in [do
 ## Found while fixing the early-month CI failure (#55)
 
 - **Ingest tests depend on the clock.** `ingest.handler` reads `dt.datetime.now(dt.UTC)`, so tests that call it with `{}` read two months in the first days of a month and one month otherwise. The fake Athena had states for one month only, so CI failed from Nov 1 until fixed. Consider injecting the date so tests never depend on the real clock.
+
+## Found when the billing data was 4 days old (2026-11-17)
+
+- **Data Exports delivered nothing for 4 days.** The newest file was from Nov 13 12:08Z until a new one landed Nov 17 13:14Z, while the export showed HEALTHY (SYNCHRONOUS refresh) and the ingest ran every 3 hours. The cause is unknown. The ingest now emails once per stalled delivery when the newest file is 48 hours old.
+- **S3 keeps only the newest file per month**, so earlier gaps can't be seen. Consider logging `exportAt` per ingest run to see how often deliveries stall.
