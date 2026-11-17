@@ -33,6 +33,7 @@ FRESHNESS_KEY = {
     "PK": {"S": "META"},
     "SK": {"S": "FRESHNESS"},
 }  # when AWS last delivered the export, and when this ingest last ran
+STALE_EXPORT_HOURS = 48  # the dashboard calls an export stale at 24h; an email waits for a gap that is not just a slow day
 ALERT_FRESH_DAYS = 3  # a hand-run backfill of old months must not email about them
 
 
@@ -88,6 +89,12 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as error:
             print(f"Freshness failed: {error!r}")
             failed.append("freshness")
+    if "months" not in event:  # its own step: a failed summary must not hide a stalled export, nor the reverse
+        try:
+            sent += ["stale-export"] if _alert_stale_export(_client("s3"), dynamodb, dt.datetime.now(dt.UTC)) else []
+        except Exception as error:
+            print(f"Stale export alert failed: {error!r}")
+            failed.append("stale export alert")
     if failed:
         raise RuntimeError(f"The summaries failed for {', '.join(failed)}; costs and alerts were written")
     return {"written": written, "alerts": sent}
@@ -103,6 +110,31 @@ def _freshness(s3: Any, dynamodb: Any, now: dt.datetime) -> None:
     if delivered is not None:
         item["exportAt"] = {"S": delivered.astimezone(dt.UTC).isoformat(timespec="seconds")}
     dynamodb.put_item(TableName=os.environ["TABLE_NAME"], Item=item)
+
+
+def _alert_stale_export(s3: Any, dynamodb: Any, now: dt.datetime) -> bool:
+    """Emails once when the newest export file is STALE_EXPORT_HOURS old. Unlike the freshness record, it falls back to
+    last month's files while this month has none, so a stall across a month boundary still counts."""
+    this_month = now.strftime("%Y-%m")
+    delivered = _export_delivered(s3, this_month)
+    if delivered is None:
+        delivered = _export_delivered(s3, (now.replace(day=1) - dt.timedelta(days=1)).strftime("%Y-%m"))
+    if delivered is None or now - delivered < dt.timedelta(hours=STALE_EXPORT_HOURS):
+        return False
+    return _publish_once(dynamodb, "ALERT#export", _stale_export(delivered, now))
+
+
+def _stale_export(delivered: dt.datetime, now: dt.datetime) -> analysis.Alert:
+    """One email per stalled delivery: the key names the file's time, so the next delivery that stalls alerts again."""
+    stamp = delivered.astimezone(dt.UTC).strftime("%Y-%m-%d %H:%M")
+    days = (now - delivered).days
+    return analysis.Alert(
+        key=f"stale-export#{stamp}",
+        subject=f"CostWatcher: billing export is {days} days old",
+        message=f"AWS last delivered the Data Exports file on {stamp} UTC ({days} days ago). The dashboard and alerts are "
+        "working from older figures until it refreshes. Check the export's status in the Billing console "
+        "(Data Exports, us-east-1).",
+    )
 
 
 def _export_delivered(s3: Any, month: str) -> dt.datetime | None:
