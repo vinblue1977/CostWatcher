@@ -1,3 +1,6 @@
+# Each ecosystem has its own day (UTC, in file order: Mon, Tue, ...). Branch protection wants PRs up to date, so PRs opened
+# together would each make the others rebase after every merge. Best effort: a PR left open past its day, or a
+# security update (these ignore `day`), can still overlap.
 # Weekly update PRs for GitHub Actions (keeps the pinned commit SHAs current), Python and npm dependencies.
 # Titles follow Conventional Commits ("ci(deps): ...", "build(deps): ...") to pass the PR title check.
 version: 2
@@ -6,6 +9,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+      day: monday
     cooldown:
       default-days: 7  # skip releases younger than a week (time for a bad release to be caught and pulled)
     commit-message:
@@ -22,6 +26,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+      day: tuesday
     cooldown:
       default-days: 7
     commit-message:
@@ -41,6 +46,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+      day: wednesday
     cooldown:
       default-days: 7
     commit-message:
@@ -57,6 +63,7 @@ updates:
     directory: /site
     schedule:
       interval: weekly
+      day: thursday
     cooldown:
       default-days: 7
     commit-message:
