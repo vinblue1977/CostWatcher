@@ -266,6 +266,9 @@ class Web(Construct):
             ],
             distribution=distribution,
             distribution_paths=["/*"],
+            # Every file revalidates on each load. Without a Cache-Control header, iOS keeps serving a stale
+            # index.html to the home-screen app, which then loads the old hashed bundle (a new tab never showed up).
+            cache_control=[s3deploy.CacheControl.no_cache()],
             memory_limit=256,
         )
 
