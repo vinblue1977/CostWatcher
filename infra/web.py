@@ -38,6 +38,7 @@ ROUTES = (
     (apigw.HttpMethod.GET, "/tags/{month}"),
     (apigw.HttpMethod.GET, "/freetier"),
     (apigw.HttpMethod.GET, "/freshness"),
+    (apigw.HttpMethod.GET, "/waste"),
 )
 
 

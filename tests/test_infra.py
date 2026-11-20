@@ -133,7 +133,13 @@ def test_api_routes_require_sign_in_and_site_is_private() -> None:
     template = _template()
     routes = template.find_resources("AWS::ApiGatewayV2::Route")
     by_key = {r["Properties"]["RouteKey"]: r["Properties"]["AuthorizationType"] for r in routes.values()}
-    assert by_key == {"GET /costs/{month}": "JWT", "GET /tags/{month}": "JWT", "GET /freetier": "JWT", "GET /freshness": "JWT"}
+    assert by_key == {
+        "GET /costs/{month}": "JWT",
+        "GET /tags/{month}": "JWT",
+        "GET /freetier": "JWT",
+        "GET /freshness": "JWT",
+        "GET /waste": "JWT",
+    }
     template.has_resource_properties(
         "AWS::S3::Bucket",
         {
@@ -214,10 +220,38 @@ def test_api_lambda_can_only_read_the_table() -> None:
         assert f"dynamodb:{write}" not in policies
 
 
-def test_only_the_ingest_lambda_writes_the_table() -> None:
+def test_only_the_ingest_and_waste_lambdas_write_the_table() -> None:
     template = _template()
     writers = [k for k, v in template.find_resources("AWS::IAM::Policy").items() if "dynamodb:PutItem" in json.dumps(v)]
-    assert len(writers) == 1 and "IngestServiceRole" in writers[0]
+    assert len(writers) == 2
+    assert sum("IngestServiceRole" in w for w in writers) == 1 and sum("WasteScanServiceRole" in w for w in writers) == 1
+
+
+def test_waste_scan_is_read_only_weekly_and_its_failures_email_the_alert_topic() -> None:
+    template = _template()
+    scan = next(
+        f
+        for f in template.find_resources("AWS::Lambda::Function").values()
+        if f["Properties"]["Handler"] == "waste.handler.handler"
+    )
+    assert scan["Properties"]["Environment"]["Variables"].keys() >= {"TABLE_NAME", "TOPIC_ARN", "PROJECT_TAG"}
+    policies = json.dumps({k: v for k, v in template.find_resources("AWS::IAM::Policy").items() if "WasteScanServiceRole" in k})
+    for read in ("ec2:DescribeNatGateways", "cloudwatch:GetMetricStatistics", "logs:DescribeLogGroups", "tag:GetResources"):
+        assert read in policies
+    for write in ("ec2:Delete", "ec2:Release", "ec2:Terminate", "ec2:Stop", "logs:Put", "logs:Delete", "dynamodb:DeleteItem"):
+        assert write not in policies  # the scan only suggests; it never changes anything
+    template.has_resource_properties(
+        "AWS::Events::Rule",
+        {
+            "ScheduleExpression": "cron(0 15 ? * SUN *)",
+            "Targets": Match.array_with(
+                [Match.object_like({"RetryPolicy": {"MaximumRetryAttempts": 0}})]
+            ),  # a retry would repeat the emails
+        },
+    )
+    template.has_resource_properties(
+        "AWS::CloudWatch::Alarm", {"AlarmDescription": "The weekly waste scan failed or could not run every check"}
+    )
 
 
 def test_export_bucket_is_private_kept_and_open_only_to_this_accounts_exports() -> None:

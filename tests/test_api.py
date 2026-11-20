@@ -138,3 +138,21 @@ def test_freshness_returns_the_stored_times_or_nulls() -> None:
 def test_handler_routes_freshness(monkeypatch: Any) -> None:
     monkeypatch.setattr(api, "_days_table", lambda: FakeTable({"Items": []}))
     assert api.handler(_event("GET /freshness"), None)["statusCode"] == 200
+
+
+def test_waste_returns_the_latest_scan_without_its_keys_or_an_empty_object() -> None:
+    item = {"PK": "WASTE", "SK": "LATEST", "scannedAt": "2026-11-22T15:00:03+00:00", "total": 1, "findings": [{"id": "nat-1"}]}
+    table = FakeTable({"Items": [item]}, {"Items": []})
+    assert json.loads(api._waste(table)["body"]) == {
+        "scannedAt": "2026-11-22T15:00:03+00:00",
+        "total": 1,
+        "findings": [{"id": "nat-1"}],
+    }
+    assert table.queries[0]["ExpressionAttributeValues"] == {":pk": "WASTE", ":sk": "LATEST"}
+    assert table.queries[0]["ConsistentRead"] is True
+    assert json.loads(api._waste(table)["body"]) == {}
+
+
+def test_handler_routes_waste(monkeypatch: Any) -> None:
+    monkeypatch.setattr(api, "_days_table", lambda: FakeTable({"Items": []}))
+    assert api.handler(_event("GET /waste", None), None)["statusCode"] == 200

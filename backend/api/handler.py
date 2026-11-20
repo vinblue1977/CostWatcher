@@ -1,4 +1,7 @@
-"""HTTP API Lambda: the signed-in user's costs, untagged resources and free-tier usage, read from DynamoDB, never Athena."""
+"""HTTP API Lambda: the signed-in user's costs, untagged resources, free-tier usage and waste findings.
+
+Everything is read from DynamoDB, never Athena.
+"""
 
 import json
 import os
@@ -32,6 +35,8 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return _free_tier()
     if event.get("routeKey") == "GET /freshness":
         return _freshness()
+    if event.get("routeKey") == "GET /waste":
+        return _waste()
     return _json(404, {"error": "not found"})
 
 
@@ -98,6 +103,18 @@ def _freshness(table: Any = None) -> dict[str, Any]:
     )
     item = page["Items"][0] if page["Items"] else {}
     return _json(200, {"exportAt": item.get("exportAt"), "ingestAt": item.get("ingestAt")})
+
+
+def _waste(table: Any = None) -> dict[str, Any]:
+    """The latest weekly waste scan (PK WASTE), which the waste Lambda rewrites; empty before the first scan."""
+    table = table or _days_table()
+    page = table.query(
+        KeyConditionExpression="PK = :pk AND SK = :sk",
+        ExpressionAttributeValues={":pk": "WASTE", ":sk": "LATEST"},
+        ConsistentRead=True,
+    )
+    item = page["Items"][0] if page["Items"] else {}
+    return _json(200, {k: v for k, v in item.items() if k not in ("PK", "SK")})
 
 
 def _json(status: int, body: dict[str, Any]) -> dict[str, Any]:
