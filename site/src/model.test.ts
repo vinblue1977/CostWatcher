@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allowance, amount, baseline, daysUntilReset, runsOutOn, sortAllowances, drivers, forecast, friendly, inRange, isSpike, latestSpike, money, monthName, movers, previousMonth, shiftDate, shortResource, ageLabel, freshLevel, usageLabel, stack, tagCoverage, weekOverWeek, checkTiles, filterFindings, findingSaving, scanDate, unlistedFindings, regionOptions } from "./model";
+import { allowance, amount, baseline, daysUntilReset, runsOutOn, sortAllowances, drivers, forecast, friendly, inRange, isSpike, latestSpike, money, monthName, movers, previousMonth, shiftDate, shortResource, ageLabel, freshLevel, usageLabel, stack, tagCoverage, weekOverWeek, checkTiles, filterFindings, findingSaving, scanDate, unlistedFindings, regionOptions, untaggedByService, percentLabel } from "./model";
 import type { Day, FreeTierUsage, WasteFinding, WasteScan } from "./model";
 
 function day(date: string, total: number, services: Record<string, number> = { S3: total }, usageTypes: Record<string, number> = {}): Day {
@@ -277,5 +277,60 @@ describe("waste scan", () => {
   it("formats the scan date and survives a bad one", () => {
     expect(scanDate("2026-11-22T15:00:03+00:00")).toBe("Sun Nov 22");
     expect(scanDate("nonsense")).toBe("nonsense");
+  });
+});
+
+describe("untagged spend by service", () => {
+  const r = (service: string, cost: number) => ({ service, cost });
+
+  it("sums a service's resources, ranks by dollars and says whether a tag can fix it", () => {
+    const rows = untaggedByService(
+      [r("AmazonCloudWatch", 0.01), r("Claude Sonnet 4.6 (Amazon Bedrock Edition)", 4), r("Claude Sonnet 4.6 (Amazon Bedrock Edition)", 0.95), r("AWSCostExplorer", 0.14)],
+      0,
+      { "Claude Sonnet 4.6 (Amazon Bedrock Edition)": 4.95, AWSCostExplorer: 0.14, AmazonCloudWatch: 1 },
+    );
+    expect(rows.map((x) => [x.service, x.fix])).toEqual([
+      ["Claude Sonnet 4.6 (Amazon Bedrock Edition)", "cannot"],
+      ["AWSCostExplorer", "cannot"],
+      ["AmazonCloudWatch", "tag"],
+    ]);
+    expect(rows[0]?.cost).toBeCloseTo(4.95);
+    expect(rows[0]?.ofService).toBe(1);
+    expect(rows[2]?.ofService).toBeCloseTo(0.01);
+    expect(rows.reduce((sum, x) => sum + x.share, 0)).toBeCloseTo(1);
+  });
+
+  it("adds the smaller resources as a last, mixed row and counts them in the shares", () => {
+    const rows = untaggedByService([r("AmazonS3", 3)], 1, { AmazonS3: 3 });
+    expect(rows.map((x) => [x.service, x.fix, x.ofService])).toEqual([["AmazonS3", "tag", 1], ["Not itemised", "mixed", null]]);
+    expect(rows[0]?.share).toBeCloseTo(0.75);
+    expect(rows[1]?.share).toBeCloseTo(0.25);
+  });
+
+  it("has no share of a service when its total is unknown, never over 100%, and ignores credits", () => {
+    const rows = untaggedByService([r("AWSLambda", 2), r("AWSLambda", -5), r("Tax", 1)], 0, { AWSLambda: 1.5 });
+    expect(rows.map((x) => [x.service, x.ofService, x.fix])).toEqual([["AWSLambda", 1, "tag"], ["Tax", null, "cannot"]]);
+  });
+
+  it("is empty when nothing is untagged", () => {
+    expect(untaggedByService([], 0, {})).toEqual([]);
+    expect(untaggedByService([r("AWSLambda", 0)], 0, {})).toEqual([]);
+  });
+
+  it("calls only marketplace Claude, Cost Explorer, tax and AWS Support untaggable; native Bedrock can be tagged", () => {
+    const names = ["AmazonBedrock", "Claude Haiku 4.5 (Amazon Bedrock Edition)", "Bedrock Claude Sonnet", "AWSCostExplorer", "Tax", "AWSSupportBusiness", "AmazonSupportCenter"];
+    const rows = untaggedByService(names.map((n, i) => r(n, 10 - i)), 0, {});
+    expect(rows.map((x) => x.fix)).toEqual(["tag", "cannot", "cannot", "cannot", "cannot", "cannot", "tag"]);
+  });
+
+  it("counts the remainder even when its resource count is zero", () => {
+    expect(untaggedByService([], 2.5, {}).map((x) => [x.service, x.cost, x.share])).toEqual([["Not itemised", 2.5, 1]]);
+  });
+
+  it("writes a tiny positive share as under 1%, never 0%", () => {
+    expect(percentLabel(0.003)).toBe("<1%");
+    expect(percentLabel(0)).toBe("0%");
+    expect(percentLabel(0.426)).toBe("43%");
+    expect(percentLabel(1)).toBe("100%");
   });
 });

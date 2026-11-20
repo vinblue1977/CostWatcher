@@ -310,6 +310,46 @@ export function tagCoverage(days: Day[], month: string): Coverage | null {
   return { month, total, tagged, untagged, pct: total > 0 ? (tagged / total) * 100 : 100 };
 }
 
+export const NOT_ITEMISED = "Not itemised";
+
+/** A 0 to 1 fraction as a whole percent; a positive fraction under 1% reads "<1%" rather than "0%". */
+export function percentLabel(fraction: number): string {
+  return fraction > 0 && fraction < 0.005 ? "<1%" : `${Math.round(fraction * 100)}%`;
+}
+// Spend AWS bills without a taggable resource: Claude models billed through the marketplace ("(Amazon Bedrock Edition)", or
+// the older "Bedrock Claude ..." names), the Cost Explorer API, tax and AWS Support. Native Amazon Bedrock spend can be tagged.
+const CANNOT_TAG = /\(Amazon Bedrock Edition\)|^Bedrock Claude|cost explorer|^tax$|^AWS Support/i;
+
+export interface ServiceUntagged {
+  service: string;
+  cost: number;
+  share: number; // of all untagged spend this month, 0 to 1
+  ofService: number | null; // of this service's own spend, 0 to 1; null when the service total is unknown
+  fix: "tag" | "cannot" | "mixed"; // a tag can fix it, it cannot, or the row is a mix of services
+}
+
+/**
+ * Untagged spend per service, largest first, from the month's top untagged resources plus the smaller remainder.
+ * `spend` is each service's total for the same month. The remainder comes last as "Not itemised": it mixes services.
+ */
+export function untaggedByService(
+  resources: { service: string; cost: number }[],
+  otherCost: number,
+  spend: Record<string, number>,
+): ServiceUntagged[] {
+  const totals: Record<string, number> = {};
+  for (const r of resources) if (r.cost > 0) totals[r.service] = (totals[r.service] ?? 0) + r.cost;
+  const rest = otherCost > 0 ? otherCost : 0; // otherCount only words the row; the dollars count either way
+  const all = Object.values(totals).reduce((sum, c) => sum + c, rest);
+  if (all <= 0) return [];
+  const rows: ServiceUntagged[] = ranked(totals).map(([service, cost]) => {
+    const own = spend[service] ?? 0;
+    return { service, cost, share: cost / all, ofService: own > 0 ? Math.min(1, cost / own) : null, fix: CANNOT_TAG.test(friendly(service)) ? "cannot" : "tag" };
+  });
+  if (rest > 0) rows.push({ service: NOT_ITEMISED, cost: rest, share: rest / all, ofService: null, fix: "mixed" });
+  return rows;
+}
+
 export function previousMonth(month: string): string {
   return new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 2, 1)).toISOString().slice(0, 7);
 }

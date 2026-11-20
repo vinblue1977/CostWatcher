@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { SignedOut } from "../api";
-import { friendly, money, monthName, previousMonth, shortResource, tagCoverage } from "../model";
-import type { Day } from "../model";
+import { friendly, money, monthName, previousMonth, percentLabel, shortResource, sumGroup, tagCoverage, untaggedByService } from "../model";
+import type { Day, ServiceUntagged } from "../model";
 import type { Untagged } from "../api";
 import { Empty } from "./parts";
 
@@ -75,20 +75,26 @@ export function Tags({ days, load }: { days: Day[]; load: (month: string) => Pro
         <p className="alert soft">No cost days for {monthName(month)} yet.</p>
       )}
 
+      <section className="panel" aria-labelledby="svc-h">
+        <div className="panel-head">
+          <div>
+            <h2 id="svc-h">Untagged spend by service</h2>
+            <p className="muted">
+              Where the untagged dollars come from, from the largest untagged resources; the rest is under "Not itemised". {last ? "Last month" : "Month to date"}.
+            </p>
+          </div>
+          <MonthTabs last={last} setLast={setLast} label="Month for services" />
+        </div>
+        <ByService state={shown} spend={sumGroup(days.filter((d) => d.date.startsWith(month)), "services")} retry={retry} />
+      </section>
+
       <section className="panel" aria-labelledby="top-h">
         <div className="panel-head">
           <div>
             <h2 id="top-h">Top untagged resources</h2>
             <p className="muted">Tag these first to shrink "unattributed". {last ? "Last month" : "Month to date"}, largest first.</p>
           </div>
-          <div role="group" aria-label="Month" className="tabs">
-            <button type="button" aria-pressed={!last} onClick={() => setLast(false)}>
-              This month
-            </button>
-            <button type="button" aria-pressed={last} onClick={() => setLast(true)}>
-              Last month
-            </button>
-          </div>
+          <MonthTabs last={last} setLast={setLast} label="Month for resources" />
         </div>
         <Resources state={shown} retry={retry} />
       </section>
@@ -98,6 +104,68 @@ export function Tags({ days, load }: { days: Day[]; load: (month: string) => Pro
         line. New tags apply to costs from the day they are added; earlier spend stays untagged.
       </p>
     </>
+  );
+}
+
+function MonthTabs({ last, setLast, label }: { last: boolean; setLast: (last: boolean) => void; label: string }) {
+  return (
+    <div role="group" aria-label={label} className="tabs">
+      <button type="button" aria-pressed={!last} onClick={() => setLast(false)}>
+        This month
+      </button>
+      <button type="button" aria-pressed={last} onClick={() => setLast(true)}>
+        Last month
+      </button>
+    </div>
+  );
+}
+
+const FIX: Record<ServiceUntagged["fix"], { label: string; className: string }> = {
+  tag: { label: "Tag it", className: "pill" },
+  cannot: { label: "Can't be tagged", className: "pill watch" },
+  mixed: { label: "Mixed", className: "pill mixed" },
+};
+
+function ByService({ state, spend, retry }: { state: Load; spend: Record<string, number>; retry: () => void }) {
+  if (state.kind === "loading") return <p className="muted" role="status">Loading…</p>;
+  if (state.kind === "error") {
+    return (
+      <p className="muted" role="alert">
+        {state.message}{" "}
+        <button type="button" className="quiet" onClick={retry}>Try again</button>
+      </p>
+    );
+  }
+  const { resources, otherCount, otherCost } = state.data;
+  const rows = untaggedByService(resources, otherCost, spend);
+  if (rows.length === 0) return <p className="muted">Every service is fully tagged in {monthName(state.month)}.</p>;
+  return (
+    <ul className="bysvc">
+      {rows.map((row) => (
+        <li key={row.service}>
+          <span className="what">
+            {row.fix === "mixed" ? row.service : friendly(row.service)}
+            <small>
+              {row.fix === "mixed"
+                ? otherCount > 0
+                  ? `${otherCount} smaller resources and items with no resource ID`
+                  : "Smaller items and items with no resource ID"
+                : row.ofService === null
+                  ? `${percentLabel(row.share)} of untagged spend`
+                  : `${percentLabel(row.ofService)} of this service's spend is untagged`}
+            </small>
+          </span>
+          <span className="track">
+            <span className="fill warn" style={{ width: `${Math.min(100, Math.max(0, row.share * 100))}%` }} />
+          </span>
+          <span className="num">
+            {money(row.cost)}
+            <small>{percentLabel(row.share)}</small>
+          </span>
+          <span className={FIX[row.fix].className}>{FIX[row.fix].label}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
