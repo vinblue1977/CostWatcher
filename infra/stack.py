@@ -2,7 +2,7 @@
 
 import re
 
-from aws_cdk import CfnOutput, DefaultStackSynthesizer, Duration, RemovalPolicy, Stack
+from aws_cdk import Aspects, CfnOutput, DefaultStackSynthesizer, Duration, RemovalPolicy, Stack
 from aws_cdk import aws_budgets as budgets
 from aws_cdk import aws_dynamodb as dynamodb
 from aws_cdk import aws_iam as iam
@@ -12,6 +12,7 @@ from cdk_nag import NagPackSuppression, NagSuppressions, RegexAppliesTo
 from constructs import Construct
 
 from infra.cur import Cur
+from infra.retention import HelperLogRetention
 from infra.tags import project_tag_key, tag_project
 from infra.web import Web
 
@@ -35,6 +36,7 @@ class CostWatcherStack(Stack):
         )
         CfnOutput(self, "TableName", value=self.table.table_name)
 
+        Aspects.of(self).add(HelperLogRetention())  # CDK's helper Lambdas log with no expiry otherwise
         topic = self._alert_topic()
         site_dir = self.node.try_get_context("siteDir") or "site/dist"  # `make site` builds it
         budget_usd = float(self.node.try_get_context("monthlyBudgetUsd") or 5)

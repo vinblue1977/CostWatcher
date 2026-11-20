@@ -409,3 +409,21 @@ def test_ingest_may_read_free_tier_usage() -> None:
             }
         },
     )
+
+
+def test_every_lambda_logs_to_a_group_that_expires_in_14_days() -> None:
+    """Including CDK's helper Lambdas (site deploy, S3 auto-delete), whose log groups Lambda would otherwise never expire."""
+    template = _template()
+    groups = {name: g["Properties"] for name, g in template.find_resources("AWS::Logs::LogGroup").items()}
+    functions = template.find_resources("AWS::Lambda::Function")
+    assert len(functions) >= 4  # API, ingest, site deploy, S3 auto-delete
+    refs = []
+    for name, function in functions.items():
+        ref = function["Properties"].get("LoggingConfig", {}).get("LogGroup", {}).get("Ref")
+        assert ref in groups, f"{name} has no managed log group"
+        assert groups[ref]["RetentionInDays"] == 14, f"{name} logs never expire or expire late"
+        refs.append(ref)
+    assert len(set(refs)) == len(refs), "two functions share a log group"
+    for name, group in template.find_resources("AWS::Logs::LogGroup").items():
+        if name.startswith("HelperLogs"):  # created by the aspect; it must not leave orphans behind
+            assert group["DeletionPolicy"] == "Delete"
