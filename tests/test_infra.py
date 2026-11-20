@@ -158,6 +158,13 @@ def test_api_routes_require_sign_in_and_site_is_private() -> None:
     )
 
 
+def test_site_files_are_uploaded_with_no_cache() -> None:
+    # A missing header let the iPhone home-screen app keep a stale index.html (and so the old bundle).
+    deployments = _template().find_resources("Custom::CDKBucketDeployment")
+    assert deployments
+    assert all(d["Properties"]["SystemMetadata"]["cache-control"] == "no-cache" for d in deployments.values())
+
+
 def test_only_extensionless_paths_fall_back_to_the_app() -> None:
     template = _template()
     config = next(iter(template.find_resources("AWS::CloudFront::Distribution").values()))["Properties"]["DistributionConfig"]
