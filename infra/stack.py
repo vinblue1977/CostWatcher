@@ -14,6 +14,7 @@ from constructs import Construct
 from infra.cur import Cur
 from infra.retention import HelperLogRetention
 from infra.tags import project_tag_key, tag_project
+from infra.waste import Waste
 from infra.web import Web
 
 GITHUB = "token.actions.githubusercontent.com"
@@ -44,6 +45,7 @@ class CostWatcherStack(Stack):
         project_tag = project_tag_key(self)
         tag_project(self)
         Cur(self, "Cur", table=self.table, topic=topic, project_tag=project_tag, budget_usd=budget_usd)  # pyright: ignore[reportArgumentType]
+        Waste(self, "Waste", table=self.table, topic=topic, project_tag=project_tag)  # pyright: ignore[reportArgumentType]
         self._budget(budget_usd)
 
         github_repo: str = self.node.try_get_context("githubRepo") or ""
