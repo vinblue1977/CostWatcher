@@ -19,6 +19,8 @@ Ideas and bugs found while building CostWatcher. The phased build plan is in [do
 - **Cost of CostWatcher itself.** The card the Breakdown mockup wanted; needs the stack's spend to be separable by the `project` tag.
 - **Pace-to-budget line.** A daily chart line for the budget pace, so a projected overrun shows before the forecast alert fires.
 - **Tag hygiene report.** Services with untagged spend, ranked by dollars.
+- **Tag Bedrock spend.** On-demand Claude calls through the `us.anthropic.*` system profiles can't carry a `project` tag, so their cost shows as untagged (about $5.40 in November 2026, nearly all NFL Sonnet 4.6 before it moved to the direct Anthropic API on 2026-11-17). If the NFL Bedrock fallback ever fires regularly, front it with a `project`-tagged application inference profile (a template change in the NFL repo plus IAM for the profile ARN). Haiku 4.5 calls (about $0.46, 2026-11-02 to 11-06 and 11-19) don't come from NFL; Stocks and Grocery both reference Haiku, so check them first.
+- **Log group retention for CDK helper Lambdas.** The `Custom::CDKBucketDeployment` and S3 auto-delete helper Lambdas create log groups with no retention. Set to 14 days by hand on 2026-11-20 (all 34 us-east-2 groups); a retention aspect in each stack would keep recreated groups from reverting.
 - **Push or Slack alerts.** SNS to a phone push or webhook, not just email.
 - **CSV export.** A download button on the Breakdown and Spikes pages.
 - [x] **Data freshness badge** (done): export delivery time, last ingest and a partial-day note.
