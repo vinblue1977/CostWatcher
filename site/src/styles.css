@@ -240,6 +240,14 @@ td .track { display: block; }
 .pill.new { color: var(--new); background: var(--new-bg); border-color: var(--new-line); font-size: 11px; }
 .findings .pill:not(.cost):not(.new) { color: var(--muted); }
 .pill.cost { color: var(--warn-text); background: var(--warn-bg); border-color: var(--warn-line); }
+.pill.mixed { color: var(--muted); }
+.bysvc { list-style: none; margin: 8px 0 0; padding: 0; }
+.bysvc li { display: grid; grid-template-columns: minmax(140px, 1.3fr) minmax(120px, 2fr) 72px 128px; gap: 8px 16px; align-items: center; padding: 11px 0; border-top: 1px solid var(--line); font-size: 14px; font-variant-numeric: tabular-nums; }
+.bysvc .what { font-weight: 500; min-width: 0; overflow-wrap: anywhere; }
+.bysvc small { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--muted); }
+.bysvc .track { display: block; flex: none; }
+.bysvc .num { text-align: right; white-space: nowrap; font-weight: 600; }
+.bysvc .pill { justify-self: end; }
 @media (max-width: 640px) {
   .checks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   /* Findings become cards: title and saving on one line, the resource and "region · first seen" underneath */
@@ -251,4 +259,8 @@ td .track { display: block; }
   .findings td.res { grid-column: 1 / -1; grid-row: 2; width: auto; }
   .findings td.region { grid-column: 1; grid-row: 3; font-size: 12px; color: var(--muted); }
   .findings td.since { grid-column: 2; grid-row: 3; font-size: 12px; color: var(--muted); }
+  .bysvc li { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; }
+  .bysvc .track { grid-column: 1 / -1; order: 3; }
+  .bysvc .pill { grid-column: 1; order: 4; justify-self: start; }
+  .bysvc .num { order: 2; }
 }
