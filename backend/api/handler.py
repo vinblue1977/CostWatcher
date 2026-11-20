@@ -114,7 +114,8 @@ def _waste(table: Any = None) -> dict[str, Any]:
         ConsistentRead=True,
     )
     item = page["Items"][0] if page["Items"] else {}
-    return _json(200, {k: v for k, v in item.items() if k not in ("PK", "SK")})
+    public = ("scannedAt", "total", "newCount", "monthly", "counts", "checkMonthly", "errors", "findings")
+    return _json(200, {k: v for k, v in item.items() if k in public})  # not the bookkeeping (seen, unsent, keys)
 
 
 def _json(status: int, body: dict[str, Any]) -> dict[str, Any]:

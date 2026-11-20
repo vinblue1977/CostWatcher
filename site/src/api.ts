@@ -1,6 +1,6 @@
 import { accessToken, forgetTokens } from "./auth";
 import type { Config } from "./auth";
-import type { Day, FreeTierUsage } from "./model";
+import type { Day, FreeTierUsage, WasteScan } from "./model";
 
 export class SignedOut extends Error {}
 
@@ -83,4 +83,11 @@ export async function loadFreshness(config: Config): Promise<Freshness> {
   const token = await accessToken(config);
   if (!token) throw new SignedOut();
   return get<Freshness>(config, token, "freshness");
+}
+
+/** The latest weekly waste scan, `{}` before the first one has run. */
+export async function loadWaste(config: Config): Promise<WasteScan> {
+  const token = await accessToken(config);
+  if (!token) throw new SignedOut();
+  return get<WasteScan>(config, token, "waste");
 }

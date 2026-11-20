@@ -16,6 +16,9 @@
   --warn-bg: #2a1f14;
   --warn-line: #5c3f1e;
   --good: #4fd6c0;
+  --new: #ff8f8f;
+  --new-bg: #2a1616;
+  --new-line: #5c2a2a;
   font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 * { box-sizing: border-box; }
@@ -223,3 +226,29 @@ td .track { display: block; }
 .fresh-strip dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; margin: 0; padding: 0 16px 14px; color: var(--text-2); }
 .fresh-strip dt { color: var(--muted); }
 .fresh-strip dd { margin: 0; }
+
+.checks { margin: 14px 0 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
+.check { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+.check b { font-size: 13px; font-weight: 600; }
+.check span { font-size: 12px; color: var(--good); font-variant-numeric: tabular-nums; }
+.check.hit { background: var(--warn-bg); border-color: var(--warn-line); }
+.check.hit span { color: var(--warn-text); }
+.findings .why { margin-top: 2px; font-size: 12px; color: var(--muted); }
+.findings td { vertical-align: top; }
+.findings td.res { width: 34%; max-width: none; white-space: normal; overflow: visible; overflow-wrap: anywhere; font-size: 12px; }
+.findings td.region, .findings td.since { white-space: nowrap; overflow-wrap: normal; color: var(--text-2); }
+.pill.new { color: var(--new); background: var(--new-bg); border-color: var(--new-line); font-size: 11px; }
+.findings .pill:not(.cost):not(.new) { color: var(--muted); }
+.pill.cost { color: var(--warn-text); background: var(--warn-bg); border-color: var(--warn-line); }
+@media (max-width: 640px) {
+  .checks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Findings become cards: title and saving on one line, the resource and "region · first seen" underneath */
+  .findings thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .findings tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; margin-bottom: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+  .findings td { display: block; padding: 0; border-top: 0; }
+  .findings td.what { grid-column: 1; grid-row: 1; font-size: 14px; font-weight: 600; }
+  .findings td.num { grid-column: 2; grid-row: 1; }
+  .findings td.res { grid-column: 1 / -1; grid-row: 2; width: auto; }
+  .findings td.region { grid-column: 1; grid-row: 3; font-size: 12px; color: var(--muted); }
+  .findings td.since { grid-column: 2; grid-row: 3; font-size: 12px; color: var(--muted); }
+}
