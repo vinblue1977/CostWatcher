@@ -395,3 +395,93 @@ export function clock(iso: string): string {
 export function stamp(iso: string): string {
   return new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
+
+export interface WasteFinding {
+  key: string;
+  check: string;
+  region: string;
+  id: string;
+  summary: string;
+  detail: string;
+  monthly: number | null; // list-price estimate; null when there is no direct dollar figure (log groups, untagged)
+  firstSeen: string; // YYYY-MM-DD
+  new: boolean;
+}
+
+/** The latest weekly scan as GET /waste returns it; `{}` (no scannedAt) before the first scan has run. */
+export interface WasteScan {
+  scannedAt?: string;
+  total?: number; // every finding; `findings` holds at most the largest 300
+  newCount?: number;
+  monthly?: number;
+  counts?: Record<string, number>;
+  checkMonthly?: Record<string, number>;
+  errors?: string[];
+  findings?: WasteFinding[];
+}
+
+export const WASTE_CHECKS = [
+  { id: "idle-nat", label: "Idle NAT gateways" },
+  { id: "idle-lb", label: "Idle load balancers" },
+  { id: "unattached-ebs", label: "Unattached EBS volumes" },
+  { id: "unattached-eip", label: "Unattached Elastic IPs" },
+  { id: "stopped-instance", label: "Stopped instances" },
+  { id: "old-snapshot", label: "Old snapshots (90+ days)" },
+  { id: "no-retention", label: "Log groups, no retention" },
+  { id: "untagged", label: "Untagged resources" },
+] as const;
+
+export const WASTE_REGIONS = ["us-east-1", "us-east-2"] as const;
+
+export interface CheckTile {
+  id: string;
+  label: string;
+  count: number;
+  detail: string;
+}
+
+/** One tile per check, the ones that found something first (in the scan's order otherwise). */
+export function checkTiles(scan: WasteScan): CheckTile[] {
+  const tiles = WASTE_CHECKS.map((c) => {
+    const count = scan.counts?.[c.id] ?? 0;
+    const monthly = scan.checkMonthly?.[c.id] ?? 0;
+    let detail = "none";
+    if (count > 0) {
+      detail = `${count} found`;
+      if (monthly > 0) detail += ` · ${money(monthly)}/mo`;
+      else if (c.id === "no-retention") detail += " · cost grows";
+    }
+    return { id: c.id, label: c.label, count, detail };
+  });
+  return [...tiles.filter((t) => t.count > 0), ...tiles.filter((t) => t.count === 0)];
+}
+
+/** The saving column: dollars when estimated, otherwise a pill that says why there is no figure. */
+export function findingSaving(f: Pick<WasteFinding, "check" | "monthly">): { text: string; cost: boolean } {
+  if (f.monthly !== null && f.monthly !== undefined) return { text: `${money(f.monthly)}/mo`, cost: true };
+  return { text: f.check === "no-retention" ? "grows" : "no direct cost", cost: false };
+}
+
+export type RegionFilter = string; // "all" or a region
+
+/** The two scanned regions, plus "global" when a finding has no region (an untagged IAM role, say). */
+export function regionOptions(findings: WasteFinding[]): string[] {
+  const extra = [...new Set(findings.map((f) => f.region))].filter((r) => !(WASTE_REGIONS as readonly string[]).includes(r)).sort();
+  return [...WASTE_REGIONS, ...extra];
+}
+
+export function filterFindings(findings: WasteFinding[], region: RegionFilter): WasteFinding[] {
+  return region === "all" ? findings : findings.filter((f) => f.region === region);
+}
+
+/** Findings counted but not listed, because the stored item keeps only the largest 300. */
+export function unlistedFindings(scan: WasteScan): number {
+  return Math.max(0, (scan.total ?? 0) - (scan.findings?.length ?? 0));
+}
+
+/** "Sun Nov 22" for a scan time (UTC date, like the other pages). */
+export function scanDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return `${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getUTCDay()]} ${shortDate(d.toISOString().slice(0, 10))}`;
+}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { loadDays, loadFreeTier, loadFreshness, loadUntagged, SignedOut } from "./api";
+import { loadDays, loadFreeTier, loadFreshness, loadUntagged, loadWaste, SignedOut } from "./api";
 import type { FreeTier, Freshness as Times, Untagged } from "./api";
+import type { WasteScan } from "./model";
 import { handleRedirect, loadConfig, signIn, signOut } from "./auth";
 import type { Config } from "./auth";
 import { Freshness } from "./Freshness";
@@ -9,6 +10,7 @@ import { FreeTierPage } from "./pages/FreeTier";
 import { Overview } from "./pages/Overview";
 import { Spikes } from "./pages/Spikes";
 import { Tags } from "./pages/Tags";
+import { WastePage } from "./pages/Waste";
 import { RANGES, sortDays } from "./model";
 import type { Day, Range } from "./model";
 
@@ -24,6 +26,7 @@ const PAGES = [
   { path: "/spikes", label: "Spikes", icon: "M2 13h4l3-8 4 12 3-4h4" },
   { path: "/tags", label: "Tags", icon: "M3 3h8l8 8-8 8-8-8zM7.5 7.5h.01" },
   { path: "/free-tier", label: "Free tier", icon: "M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18M3.5 7.5h17M3.5 16.5h17" },
+  { path: "/waste", label: "Waste", icon: "M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" },
 ] as const;
 
 function usePath(): string {
@@ -84,10 +87,11 @@ export function App() {
 
 type Ready = Extract<State, { kind: "ready" }>;
 
-export function Shell({ state, path, range, setRange, loadTags, loadAllowances, loadTimes }: { state: Ready; path: string; range: Range; setRange: (r: Range) => void; loadTags?: (month: string) => Promise<Untagged>; loadAllowances?: () => Promise<FreeTier>; loadTimes?: () => Promise<Times> }) {
+export function Shell({ state, path, range, setRange, loadTags, loadAllowances, loadTimes, loadScan }: { state: Ready; path: string; range: Range; setRange: (r: Range) => void; loadTags?: (month: string) => Promise<Untagged>; loadAllowances?: () => Promise<FreeTier>; loadTimes?: () => Promise<Times>; loadScan?: () => Promise<WasteScan> }) {
   const page = PAGES.find((p) => p.path === path)?.path ?? "/";
   const config = state.config;
   const freeTier = useCallback(() => loadFreeTier(config), [config]);
+  const waste = useCallback(() => loadWaste(config), [config]);
   const [times, setTimes] = useState<Times | null>(null);
   useEffect(() => {
     // Only a convenience: without the times the badge is simply left out, and a failed refetch keeps the last ones.
@@ -102,8 +106,9 @@ export function Shell({ state, path, range, setRange, loadTags, loadAllowances, 
     if (page === "/spikes") return <Spikes days={state.days} />;
     if (page === "/tags") return <Tags days={state.days} load={loadTags ?? ((month) => loadUntagged(state.config, month))} />;
     if (page === "/free-tier") return <FreeTierPage load={loadAllowances ?? freeTier} />;
+    if (page === "/waste") return <WastePage load={loadScan ?? waste} />;
     return <Overview days={state.days} range={range} budget={state.config.budgetUsd} />;
-  }, [page, state, range, loadTags, loadAllowances, freeTier]);
+  }, [page, state, range, loadTags, loadAllowances, freeTier, loadScan, waste]);
   return (
     <div className="shell">
       <header className="top">
@@ -127,7 +132,7 @@ export function Shell({ state, path, range, setRange, loadTags, loadAllowances, 
         </nav>
         <div className="controls">
           <Freshness variant="pill" times={times} days={state.days} />
-          {page !== "/spikes" && page !== "/tags" && page !== "/free-tier" && (
+          {page !== "/spikes" && page !== "/tags" && page !== "/free-tier" && page !== "/waste" && (
             <>
               <div role="group" aria-label="Date range" className="segmented">
                 {RANGES.map((r) => (

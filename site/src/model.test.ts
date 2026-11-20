@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { allowance, amount, baseline, daysUntilReset, runsOutOn, sortAllowances, drivers, forecast, friendly, inRange, isSpike, latestSpike, money, monthName, movers, previousMonth, shiftDate, shortResource, ageLabel, freshLevel, usageLabel, stack, tagCoverage, weekOverWeek } from "./model";
-import type { Day, FreeTierUsage } from "./model";
+import { allowance, amount, baseline, daysUntilReset, runsOutOn, sortAllowances, drivers, forecast, friendly, inRange, isSpike, latestSpike, money, monthName, movers, previousMonth, shiftDate, shortResource, ageLabel, freshLevel, usageLabel, stack, tagCoverage, weekOverWeek, checkTiles, filterFindings, findingSaving, scanDate, unlistedFindings, regionOptions } from "./model";
+import type { Day, FreeTierUsage, WasteFinding, WasteScan } from "./model";
 
 function day(date: string, total: number, services: Record<string, number> = { S3: total }, usageTypes: Record<string, number> = {}): Day {
   return { date, total, services, projects: {}, usageTypes };
@@ -225,5 +225,57 @@ describe("export freshness", () => {
     expect(ageLabel("2026-10-27T05:00:00Z", now)).toBe("1 day old");
     expect(ageLabel("2026-10-26T08:26:00Z", now)).toBe("2 days old");
     expect(ageLabel("2026-10-28T13:00:30Z", now)).toBe("0m ago"); // a clock slightly ahead
+  });
+});
+
+describe("waste scan", () => {
+  const f = (over: Partial<WasteFinding>): WasteFinding => ({
+    key: "k", check: "idle-nat", region: "us-east-1", id: "nat-1", summary: "Idle NAT gateway", detail: "", monthly: 32.85, firstSeen: "2026-11-08", new: false, ...over,
+  });
+
+  it("makes eight tiles, found ones first, with dollars, 'grows' or nothing", () => {
+    const tiles = checkTiles({ counts: { "idle-nat": 2, "no-retention": 3, untagged: 1 }, checkMonthly: { "idle-nat": 65.7 } });
+    expect(tiles).toHaveLength(8);
+    expect(tiles.slice(0, 3).map((t) => [t.id, t.detail])).toEqual([
+      ["idle-nat", "2 found · $65.70/mo"],
+      ["no-retention", "3 found · cost grows"],
+      ["untagged", "1 found"],
+    ]);
+    expect(tiles.slice(3).every((t) => t.detail === "none")).toBe(true);
+  });
+
+  it("copes with an empty or partial item", () => {
+    expect(checkTiles({}).every((t) => t.count === 0 && t.detail === "none")).toBe(true);
+    expect(unlistedFindings({})).toBe(0);
+  });
+
+  it("labels the saving", () => {
+    expect(findingSaving(f({}))).toEqual({ text: "$32.85/mo", cost: true });
+    expect(findingSaving(f({ monthly: 0 }))).toEqual({ text: "$0.00/mo", cost: true });
+    expect(findingSaving(f({ check: "no-retention", monthly: null }))).toEqual({ text: "grows", cost: false });
+    expect(findingSaving(f({ check: "untagged", monthly: null }))).toEqual({ text: "no direct cost", cost: false });
+  });
+
+  it("filters by region", () => {
+    const all = [f({ region: "us-east-1" }), f({ region: "us-east-2" }), f({ region: "global" })];
+    expect(filterFindings(all, "all")).toHaveLength(3);
+    expect(filterFindings(all, "us-east-2").map((x) => x.region)).toEqual(["us-east-2"]);
+  });
+
+  it("offers both regions, plus any other region a finding has", () => {
+    expect(regionOptions([])).toEqual(["us-east-1", "us-east-2"]);
+    expect(regionOptions([f({ region: "global" }), f({ region: "us-east-1" })])).toEqual(["us-east-1", "us-east-2", "global"]);
+  });
+
+  it("says how many findings are not listed when the item was cut at 300", () => {
+    const cut: WasteScan = { total: 412, findings: Array.from({ length: 300 }, () => f({})) };
+    expect(unlistedFindings(cut)).toBe(112);
+    expect(unlistedFindings({ total: 5, findings: [f({})] })).toBe(4);
+    expect(unlistedFindings({ total: 1, findings: [f({})] })).toBe(0);
+  });
+
+  it("formats the scan date and survives a bad one", () => {
+    expect(scanDate("2026-11-22T15:00:03+00:00")).toBe("Sun Nov 22");
+    expect(scanDate("nonsense")).toBe("nonsense");
   });
 });
