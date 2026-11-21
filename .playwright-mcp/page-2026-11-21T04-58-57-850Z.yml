@@ -1,0 +1,203 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]: CostWatcher
+    - navigation "Primary" [ref=e11]:
+      - link "Overview" [ref=e12]:
+        - /url: "#/"
+      - link "Breakdown" [ref=e15]:
+        - /url: "#/breakdown"
+      - link "Spikes" [ref=e18]:
+        - /url: "#/spikes"
+      - link "Tags" [ref=e21]:
+        - /url: "#/tags"
+      - link "Free tier" [ref=e24]:
+        - /url: "#/free-tier"
+      - link "Waste" [ref=e27]:
+        - /url: "#/waste"
+    - generic [ref=e31]:
+      - generic [ref=e32]: Date range
+      - combobox "Date range" [ref=e33]:
+        - option "7d"
+        - option "14d" [selected]
+        - option "30d"
+        - option "MTD"
+  - main [ref=e34]:
+    - region "Alert" [ref=e35]:
+      - paragraph [ref=e37]:
+        - strong [ref=e38]: Oct 16 cost $3.39
+        - text: ", 3.2× the trailing 7-day average ($1.07). Amazon Bedrock was +$2.39 from normal."
+      - link "See what changed →" [ref=e39]:
+        - /url: "#/spikes"
+    - region "Key figures" [ref=e40]:
+      - generic [ref=e41]:
+        - generic [ref=e42]: Month to date
+        - generic [ref=e43]: $23.51
+        - generic [ref=e44]: Oct 1 – Oct 20
+      - generic [ref=e45]:
+        - generic [ref=e46]: Forecast for the month
+        - generic [ref=e47]: $36.44
+        - generic [ref=e48]: Range $35 – $38 · budget $50
+      - generic [ref=e49]:
+        - generic [ref=e50]: Last 7 days
+        - generic [ref=e51]: $9.82
+        - generic [ref=e52]:
+          - generic [ref=e53]: +33%
+          - text: vs prior 7 days
+      - generic [ref=e54]:
+        - generic [ref=e55]: Average day
+        - generic [ref=e56]: $1.23
+        - generic [ref=e57]: over the selected 14d
+    - region [ref=e58]:
+      - generic [ref=e59]:
+        - generic [ref=e60]:
+          - heading "Daily cost by service" [level=2] [ref=e61]
+          - paragraph [ref=e62]: Oct 7 – Oct 20 · stacked, USD
+        - generic [ref=e63]:
+          - generic [ref=e64]: Group by
+          - combobox "Group by" [ref=e65]:
+            - option "Service" [selected]
+            - option "Project"
+            - option "Usage type"
+      - list [ref=e66]:
+        - listitem "AmazonBedrock" [ref=e67]: Amazon Bedrock
+        - listitem "AmazonDynamoDB" [ref=e69]: Amazon Dynamo DB
+        - listitem "AmazonCloudWatch" [ref=e71]: Amazon Cloud Watch
+        - listitem "AWSLambda" [ref=e73]: AWS Lambda
+        - listitem "AmazonCloudFront" [ref=e75]: Amazon Cloud Front
+        - listitem [ref=e77]: Other
+      - img "Stacked bars of daily cost by group from Oct 7 to Oct 20. Largest day $3.39." [ref=e79]:
+        - generic [ref=e80]:
+          - generic [ref=e82]:
+            - 'generic "Amazon Bedrock: $0.48" [ref=e83]'
+            - 'generic "Amazon Dynamo DB: $0.19" [ref=e84]'
+            - 'generic "Amazon Cloud Watch: $0.15" [ref=e85]'
+            - 'generic "AWS Lambda: $0.13" [ref=e86]'
+            - 'generic "Amazon Cloud Front: $0.10" [ref=e87]'
+            - 'generic "Other: $0.09" [ref=e88]'
+          - generic [ref=e90]:
+            - 'generic "Amazon Bedrock: $0.40" [ref=e91]'
+            - 'generic "Amazon Dynamo DB: $0.16" [ref=e92]'
+            - 'generic "Amazon Cloud Watch: $0.12" [ref=e93]'
+            - 'generic "AWS Lambda: $0.11" [ref=e94]'
+            - 'generic "Amazon Cloud Front: $0.08" [ref=e95]'
+            - 'generic "Other: $0.07" [ref=e96]'
+          - generic [ref=e98]:
+            - 'generic "Amazon Bedrock: $0.43" [ref=e99]'
+            - 'generic "Amazon Dynamo DB: $0.17" [ref=e100]'
+            - 'generic "Amazon Cloud Watch: $0.14" [ref=e101]'
+            - 'generic "AWS Lambda: $0.12" [ref=e102]'
+            - 'generic "Amazon Cloud Front: $0.09" [ref=e103]'
+            - 'generic "Other: $0.08" [ref=e104]'
+          - generic [ref=e106]:
+            - 'generic "Amazon Bedrock: $0.50" [ref=e107]'
+            - 'generic "Amazon Dynamo DB: $0.20" [ref=e108]'
+            - 'generic "Amazon Cloud Watch: $0.16" [ref=e109]'
+            - 'generic "AWS Lambda: $0.13" [ref=e110]'
+            - 'generic "Amazon Cloud Front: $0.10" [ref=e111]'
+            - 'generic "Other: $0.09" [ref=e112]'
+          - generic [ref=e114]:
+            - 'generic "Amazon Bedrock: $0.45" [ref=e115]'
+            - 'generic "Amazon Dynamo DB: $0.18" [ref=e116]'
+            - 'generic "Amazon Cloud Watch: $0.14" [ref=e117]'
+            - 'generic "AWS Lambda: $0.12" [ref=e118]'
+            - 'generic "Amazon Cloud Front: $0.09" [ref=e119]'
+            - 'generic "Other: $0.08" [ref=e120]'
+          - generic [ref=e122]:
+            - 'generic "Amazon Bedrock: $0.40" [ref=e123]'
+            - 'generic "Amazon Dynamo DB: $0.16" [ref=e124]'
+            - 'generic "Amazon Cloud Watch: $0.12" [ref=e125]'
+            - 'generic "AWS Lambda: $0.11" [ref=e126]'
+            - 'generic "Amazon Cloud Front: $0.08" [ref=e127]'
+            - 'generic "Other: $0.07" [ref=e128]'
+          - generic [ref=e130]:
+            - 'generic "Amazon Bedrock: $0.46" [ref=e131]'
+            - 'generic "Amazon Dynamo DB: $0.18" [ref=e132]'
+            - 'generic "Amazon Cloud Watch: $0.14" [ref=e133]'
+            - 'generic "AWS Lambda: $0.12" [ref=e134]'
+            - 'generic "Amazon Cloud Front: $0.09" [ref=e135]'
+            - 'generic "Other: $0.08" [ref=e136]'
+          - generic [ref=e138]:
+            - 'generic "Amazon Bedrock: $0.50" [ref=e139]'
+            - 'generic "Amazon Dynamo DB: $0.20" [ref=e140]'
+            - 'generic "Amazon Cloud Watch: $0.16" [ref=e141]'
+            - 'generic "AWS Lambda: $0.13" [ref=e142]'
+            - 'generic "Amazon Cloud Front: $0.10" [ref=e143]'
+            - 'generic "Other: $0.09" [ref=e144]'
+          - generic [ref=e146]:
+            - 'generic "Amazon Bedrock: $0.43" [ref=e147]'
+            - 'generic "Amazon Dynamo DB: $0.17" [ref=e148]'
+            - 'generic "Amazon Cloud Watch: $0.13" [ref=e149]'
+            - 'generic "AWS Lambda: $0.11" [ref=e150]'
+            - 'generic "Amazon Cloud Front: $0.09" [ref=e151]'
+            - 'generic "Other: $0.08" [ref=e152]'
+          - generic [ref=e153]:
+            - generic [ref=e154]: $3.39
+            - generic [ref=e155]:
+              - 'generic "Amazon Bedrock: $2.84" [ref=e156]'
+              - 'generic "Amazon Dynamo DB: $0.16" [ref=e157]'
+              - 'generic "Amazon Cloud Watch: $0.13" [ref=e158]'
+              - 'generic "AWS Lambda: $0.11" [ref=e159]'
+              - 'generic "Amazon Cloud Front: $0.08" [ref=e160]'
+              - 'generic "Other: $0.07" [ref=e161]'
+          - generic [ref=e163]:
+            - 'generic "Amazon Bedrock: $0.49" [ref=e164]'
+            - 'generic "Amazon Dynamo DB: $0.19" [ref=e165]'
+            - 'generic "Amazon Cloud Watch: $0.15" [ref=e166]'
+            - 'generic "AWS Lambda: $0.13" [ref=e167]'
+            - 'generic "Amazon Cloud Front: $0.10" [ref=e168]'
+            - 'generic "Other: $0.09" [ref=e169]'
+          - generic [ref=e171]:
+            - 'generic "Amazon Bedrock: $0.49" [ref=e172]'
+            - 'generic "Amazon Dynamo DB: $0.19" [ref=e173]'
+            - 'generic "Amazon Cloud Watch: $0.15" [ref=e174]'
+            - 'generic "AWS Lambda: $0.13" [ref=e175]'
+            - 'generic "Amazon Cloud Front: $0.10" [ref=e176]'
+            - 'generic "Other: $0.09" [ref=e177]'
+          - generic [ref=e179]:
+            - 'generic "Amazon Bedrock: $0.40" [ref=e180]'
+            - 'generic "Amazon Dynamo DB: $0.16" [ref=e181]'
+            - 'generic "Amazon Cloud Watch: $0.13" [ref=e182]'
+            - 'generic "AWS Lambda: $0.11" [ref=e183]'
+            - 'generic "Amazon Cloud Front: $0.08" [ref=e184]'
+            - 'generic "Other: $0.07" [ref=e185]'
+          - generic [ref=e187]:
+            - 'generic "Amazon Bedrock: $0.43" [ref=e188]'
+            - 'generic "Amazon Dynamo DB: $0.17" [ref=e189]'
+            - 'generic "Amazon Cloud Watch: $0.13" [ref=e190]'
+            - 'generic "AWS Lambda: $0.11" [ref=e191]'
+            - 'generic "Amazon Cloud Front: $0.09" [ref=e192]'
+            - 'generic "Other: $0.08" [ref=e193]'
+        - generic [ref=e194]:
+          - generic [ref=e195]: "7"
+          - generic [ref=e196]: "8"
+          - generic [ref=e197]: "9"
+          - generic [ref=e198]: "10"
+          - generic [ref=e199]: "11"
+          - generic [ref=e200]: "12"
+          - generic [ref=e201]: "13"
+          - generic [ref=e202]: "14"
+          - generic [ref=e203]: "15"
+          - generic [ref=e204]: "16"
+          - generic [ref=e205]: "17"
+          - generic [ref=e206]: "18"
+          - generic [ref=e207]: "19"
+          - generic [ref=e208]: "20"
+    - generic [ref=e209]:
+      - region [ref=e210]:
+        - heading "Top movers" [level=2] [ref=e211]
+        - paragraph [ref=e212]: Last 7 days vs the 7 days before
+        - list [ref=e213]:
+          - listitem [ref=e214]:
+            - generic [ref=e215]: Amazon Bedrock
+            - generic [ref=e216]: +$2.44
+            - generic [ref=e217]: +78%
+      - region [ref=e218]:
+        - heading "Forecast and budget" [level=2] [ref=e219]
+        - img "$23.51 spent, $36.44 projected, budget $50" [ref=e220]
+        - generic [ref=e224]:
+          - generic [ref=e225]: $23.51 spent
+          - generic [ref=e226]: $36.44 projected (73% of budget)
+          - generic [ref=e227]: $50 budget
+        - paragraph [ref=e228]: Straight-line from the days so far; the range opens once a week of days exists, so early in a month or right after sign-up it is only a rough guide.
+    - paragraph [ref=e229]: 6 services in this range. Billing data arrives up to a day late and can be revised until the month closes.
+    - button "Sign out" [ref=e230] [cursor=pointer]
