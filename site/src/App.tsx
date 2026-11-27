@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { loadDays, loadFreeTier, loadFreshness, loadUntagged, loadWaste, SignedOut } from "./api";
 import type { FreeTier, Freshness as Times, Untagged } from "./api";
 import type { WasteScan } from "./model";
-import { handleRedirect, loadConfig, signIn, signOut } from "./auth";
+import { handleRedirect, hasSession, loadConfig, signIn, signOut } from "./auth";
 import type { Config } from "./auth";
+import { clearSnapshot, readSnapshot, saveSnapshot } from "./cache";
 import { Freshness } from "./Freshness";
 import { Breakdown } from "./pages/Breakdown";
 import { FreeTierPage } from "./pages/FreeTier";
@@ -41,27 +42,35 @@ function usePath(): string {
 }
 
 export function App() {
-  const [state, setState] = useState<State>({ kind: "loading" });
+  // Paint the last costs at once and refresh behind them. Not while finishing a sign-in (?code=...), which has to run first.
+  const [cached] = useState(() => (/[?&](code|error)=/.test(window.location.search) || !hasSession() ? null : readSnapshot()));
+  const [state, setState] = useState<State>(() =>
+    cached ? { kind: "ready", config: cached.config, days: sortDays(cached.days) } : { kind: "loading" },
+  );
   const [range, setRange] = useState<Range>("14d");
   const path = usePath();
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (showing: boolean) => {
     try {
       const config = await loadConfig();
       await handleRedirect(config);
       const days = await loadDays(config);
+      // Another tab may have signed out while this loaded; do not write the costs back after that.
+      if (!days) clearSnapshot();
+      else if (hasSession()) saveSnapshot({ config, days });
       setState(days ? { kind: "ready", config, days: sortDays(days) } : { kind: "signedOut", config });
     } catch (error) {
       if (error instanceof SignedOut) {
         const config = await loadConfig().catch(() => null);
         if (config) return setState({ kind: "signedOut", config });
       }
+      if (showing) return; // a failed refresh keeps the costs already on screen
       setState({ kind: "error", message: error instanceof Error ? error.message : "something went wrong" });
     }
   }, []);
   useEffect(() => {
-    void load();
-  }, [load]);
+    void load(cached !== null);
+  }, [load, cached]);
 
   if (state.kind === "loading") return <p className="status" role="status">Loading…</p>;
   if (state.kind === "error") {
@@ -69,7 +78,7 @@ export function App() {
       <main className="gate">
         <h1>CostWatcher</h1>
         <p role="alert">{state.message}</p>
-        <button type="button" className="primary" onClick={() => void load()}>Try again</button>
+        <button type="button" className="primary" onClick={() => void load(false)}>Try again</button>
       </main>
     );
   }
