@@ -90,3 +90,9 @@ Ideas and bugs found while building CostWatcher. The phased build plan is in [do
 
 - **Data Exports delivered nothing for 4 days.** The newest file was from Nov 13 12:08Z until a new one landed Nov 17 13:14Z, while the export showed HEALTHY (SYNCHRONOUS refresh) and the ingest ran every 3 hours. The cause is unknown. The ingest now emails once per stalled delivery when the newest file is 48 hours old.
 - **S3 keeps only the newest file per month**, so earlier gaps can't be seen. Consider logging `exportAt` per ingest run to see how often deliveries stall.
+
+## Found while making the app open instantly (fix/instant-open)
+
+- **A failed background refresh is silent.** The app opens on the saved costs and, if the refresh fails (API down, offline), keeps showing them with no sign that they are old. Consider a small "last updated" or "couldn't refresh" note (needs a mockup first).
+- **Cached config can outlive a redeploy.** Until the refresh replaces it, the sub-pages use the saved `apiUrl`/`clientId`, so after the stack's URLs change they fail until the refresh succeeds.
+- **No App-level tests.** The site tests run in node without a DOM; the snapshot logic in `App.tsx` (skip on `?code=`, keep on failed refresh) is only covered through `cache.ts`.

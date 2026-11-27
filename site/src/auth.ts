@@ -1,6 +1,8 @@
 // Sign-in with the Cognito hosted UI: authorization code + PKCE, no client secret. The CSP (script-src 'self')
 // is what keeps these tokens out of reach of injected scripts.
 
+import { clearSnapshot } from "./cache";
+
 export interface Config {
   apiUrl: string;
   authUrl: string;
@@ -38,6 +40,7 @@ let memory: Tokens | null = null;
 
 function saveTokens(tokens: Tokens | null): void {
   memory = tokens;
+  if (!tokens) clearSnapshot(); // no session, no cached costs
   write(localStorage, TOKENS, tokens && JSON.stringify(tokens));
 }
 function loadTokens(): Tokens | null {
@@ -50,6 +53,11 @@ function loadTokens(): Tokens | null {
   } catch {
     return null;
   }
+}
+
+/** Whether a session is stored on this device (it may still need a refresh). */
+export function hasSession(): boolean {
+  return loadTokens() !== null;
 }
 
 export async function loadConfig(): Promise<Config> {
